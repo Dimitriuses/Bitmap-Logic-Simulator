@@ -37,9 +37,8 @@ jobs:
       - run: npm run build
 
       - name: Stage the site
-        # Everything the page actually requests, and nothing else — the Delphi
-        # reference implementation and its prebuilt .exe stay out of the
-        # published site.
+        # Everything the page actually requests, and nothing else — the specs,
+        # the build sources and the tooling stay out of the published site.
         run: |
           mkdir -p _site
           cp index.html .nojekyll _site/

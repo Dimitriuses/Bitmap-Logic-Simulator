@@ -6,14 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Two things live here:
 
-1. **`BmpLogicSim150902/`** — the original Delphi/VCL Win32 desktop simulator ("Bitmap Logic Simulator"). It is the **reference implementation** and the source of truth for simulation semantics.
+1. **`BmpLogicSim150902/`** — the original Delphi/VCL Win32 desktop simulator ("Bitmap Logic Simulator") by Zoltán Hetesi. It is the **reference implementation** and the source of truth for simulation semantics. **It is untracked and gitignored**: it is someone else's program, it was purged from this repository's history, and it is never pushed. Every `BmpLogicSim150902/...` path below therefore resolves on this machine but *not* in a fresh clone — if it is missing, the folder has to be obtained separately, and nothing that needs it can be checked against the original until then.
 2. **`src/`** — the web port, in TypeScript, compiled by plain `tsc` to native ES modules in `dist/`. The site root *is* the repo root: `index.html`, `css/`, `dist/` and `projects/`. There is no bundler and no runtime dependency; `typescript` is the only devDependency.
 
 The schematics live under [`projects/`](projects), grouped into folders (`CPU/`, `Calc/`, `Enigma_v1/`, `Enigma_v2/`, `External_Shemes/`, plus a few loose at the top). They are both test data and the contents of the app's Examples menu, which [scripts/gen-examples.mjs](scripts/gen-examples.mjs) generates into `dist/examples.json` at build time — there is no hand-maintained manifest and no second copy of the PNGs.
 
 An earlier layout kept the web app in `docs/` with its own `docs/examples/`. Both are gone; anything still referring to them (notably [.specify/spec.md](.specify/spec.md) and [.specify/plan.md](.specify/plan.md)) predates the move.
 
-This directory is **not a git repository**.
+This directory **is** a git repository, pushed to `github.com/Dimitriuses/Bitmap-Logic-Simulator` and published via GitHub Pages by [.github/workflows/pages.yml](.github/workflows/pages.yml).
 
 ## Build & run
 
@@ -69,7 +69,7 @@ The repo is initialized with GitHub Spec Kit 0.14.2 (PowerShell variant, Claude 
 
 Two things to know before running any of them:
 
-- **Feature resolution does not use git branches here** (not a repo). `create-new-feature.ps1` creates `specs/NNN-name/` and exports `SPECIFY_FEATURE` / `SPECIFY_FEATURE_DIRECTORY`, persisted in `.specify/feature.json`. Since env vars don't survive between tool calls, expect `Get-FeaturePathsEnv` to resolve via `feature.json`.
+- **Feature resolution does not use git branches here.** `create-new-feature.ps1` creates `specs/NNN-name/` and exports `SPECIFY_FEATURE` / `SPECIFY_FEATURE_DIRECTORY`, persisted in `.specify/feature.json`. Since env vars don't survive between tool calls, expect `Get-FeaturePathsEnv` to resolve via `feature.json`.
 - **The existing `spec.md` and `plan.md` sit at `.specify/` root, not under `specs/NNN-*/`** — they predate the normal flow. New spec-kit commands will look in `specs/`, so point them explicitly at the existing files or migrate them rather than letting a second, competing spec appear.
 
 [.specify/memory/constitution.md](.specify/memory/constitution.md) is still an unfilled template — its placeholders carry no rules. The plan's own "Constitution Check" (simplicity, no frameworks, no build tools, no external dependencies, client-side only) was the original constraint set. It still holds with one deliberate exception: the port is TypeScript, so `tsc` is a build step and `typescript` a devDependency. Everything else stands — no framework, no bundler, no runtime dependency, client-side only.

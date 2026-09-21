@@ -5,10 +5,10 @@ node_modules/
 dist/
 _site/
 
-# Desktop build leftovers (Delphi)
-BmpLogicSim150902/*.dcu
-BmpLogicSim150902/__history/
-BmpLogicSim150902/Win32/
+# The original Delphi simulator by Zoltán Hetesi. Kept locally as the reference
+# for simulation semantics (UMain.pas), deliberately not redistributed here —
+# it is someone else's work, binary included. Not in this repository's history.
+BmpLogicSim150902/
 
 *.local
 .DS_Store

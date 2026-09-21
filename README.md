@@ -4,12 +4,14 @@ A logic simulator where **the picture is the circuit**. Load a PNG and the
 pixels *are* the netlist: bright pixels are wires, little `+` shapes are
 inverters. Nothing is uploaded — it all runs in the tab.
 
-This repository holds two implementations:
+The simulator itself lives in [`src/`](src): a TypeScript port that runs in the
+browser, published to GitHub Pages from the repository root.
 
-| | |
-| --- | --- |
-| [`src/`](src) | A TypeScript web port that runs in the browser, published to GitHub Pages from the repository root. |
-| [`BmpLogicSim150902/`](BmpLogicSim150902) | The original Delphi/VCL Win32 desktop app by Zoltán Hetesi. Reference implementation and source of truth for simulation semantics ([`UMain.pas`](BmpLogicSim150902/UMain.pas)). |
+It is a reimplementation of the original Delphi/VCL Win32 desktop app,
+**Bitmap Logic Simulator** by Zoltán Hetesi, whose `UMain.pas` is the reference
+for every simulation rule below. That program is not redistributed here — it is
+someone else's work — so you will need to obtain it separately if you want to
+compare behaviour against the original.
 
 The schematics live in [`projects/`](projects) and are what the app's **Examples**
 menu is built from.
@@ -39,7 +41,6 @@ src/*.ts            TypeScript source
 dist/               build output — generated, not committed
 projects/           the schematics, grouped into folders
 scripts/            build helpers
-BmpLogicSim150902/  the original Delphi implementation
 ```
 
 | Module | What it does |
@@ -188,16 +189,13 @@ and Pointer Events. Live reload additionally needs the File System Access API
 Large schematics are memory-hungry — the 2048×2048 example needs roughly 60 MB
 of typed arrays — which can be tight on older phones.
 
-## Running the original desktop version
-
-`BmpLogicSim150902/BmpLogicSim.exe` is a prebuilt Win32 binary and runs as-is.
-Rebuilding needs RAD Studio (Win32, `ProjectVersion` 12.2): open
-`BmpLogicSim150902/BmpLogicSim.dproj`, or run `msbuild BmpLogicSim.dproj
-/p:Config=Release` after Delphi's `rsvars.bat`.
-
 ## Credits
 
-Original Bitmap Logic Simulator (Delphi/VCL) and all example schematics by
-Zoltán Hetesi. This port reimplements the engine in TypeScript; see
-[`src/simulator.ts`](src/simulator.ts), where the deliberate divergences from
-the original are marked `PORT NOTE`.
+The original Bitmap Logic Simulator (Delphi/VCL) and all the example schematics
+are the work of **Zoltán Hetesi**. Neither the original program nor its source
+is included in this repository; only the schematics are, and the credit for
+those is his.
+
+This port reimplements the engine in TypeScript from that program's behaviour.
+See [`src/simulator.ts`](src/simulator.ts), where each deliberate divergence
+from the original is marked `PORT NOTE`.
