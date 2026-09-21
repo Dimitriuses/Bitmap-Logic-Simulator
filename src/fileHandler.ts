@@ -35,7 +35,7 @@ const FALLBACK_EXAMPLES: ExampleEntry[] = [
 ];
 
 /** The schematic shown on a cold start, if it is in the manifest. */
-export const DEFAULT_EXAMPLE = 'projects/Enigma_v1/counter.png';
+export const DEFAULT_EXAMPLE = 'projects/Enigma_v2/Enigma2.png';
 
 export const supportsLiveReload =
   typeof window !== 'undefined' && typeof window.showOpenFilePicker === 'function';
