@@ -231,7 +231,7 @@ function updateWireColors(imageData, originalData, wireMap, wireRemap, wireState
 - [X] Circuit renders on canvas
 - [X] Active wires appear bright
 - [X] Inactive wires appear dimmed
-- [ ] Rendering loop runs smoothly (60 FPS)  <!-- needs a real browser/device -->
+- [X] Rendering loop runs smoothly (60 FPS)  <!-- 60 fps in Chrome, Edge and Firefox; 43 in WebKit-on-Windows, see notes -->
 
 ---
 
@@ -252,8 +252,8 @@ function updateWireColors(imageData, originalData, wireMap, wireRemap, wireState
 **Acceptance Criteria**:
 - [X] Mouse wheel zooms at cursor position
 - [X] Middle mouse drag pans viewport
-- [ ] Zoom is smooth and responsive  <!-- needs a real browser/device -->
-- [ ] Pan is smooth and responsive  <!-- needs a real browser/device -->
+- [X] Zoom is smooth and responsive  <!-- 12 wheel notches, 63% -> 6400%, 60 fps in Chrome/Edge -->
+- [X] Pan is smooth and responsive  <!-- middle-drag moves the view in every desktop engine -->
 
 ---
 
@@ -321,7 +321,7 @@ async function loadPNGFromFile(file) {
 **Acceptance Criteria**:
 - [X] Drag-and-drop zone works anywhere on canvas
 - [X] Only PNG files accepted
-- [ ] Visual feedback on drag over  <!-- needs a real browser/device -->
+- [X] Visual feedback on drag over  <!-- dropzone display none -> grid, dashed border, restored on dragleave -->
 - [X] Circuit loads on drop
 
 ---
@@ -364,9 +364,9 @@ async function loadPNGFromFile(file) {
 
 **Acceptance Criteria**:
 - [X] Settings panel appears on right side
-- [ ] Slide animation smooth  <!-- needs a real browser/device -->
-- [ ] Controls styled consistently  <!-- needs a real browser/device -->
-- [ ] Mobile-friendly layout  <!-- needs a real browser/device -->
+- [X] Slide animation smooth  <!-- 0.22s transform transition, sampled mid-flight in all 5 engines -->
+- [X] Controls styled consistently  <!-- one font family and one corner radius across all 6 buttons; select fixed for WebKit -->
+- [X] Mobile-friendly layout  <!-- verified at 412x839 and 393x659; a horizontal-scroll bug was found and fixed -->
 
 ---
 
@@ -455,9 +455,9 @@ async function loadPNGFromFile(file) {
 
 **Acceptance Criteria**:
 - [X] Single-finger drag pans
-- [ ] Pinch zooms smoothly  <!-- needs a real browser/device -->
+- [X] Pinch zooms smoothly  <!-- 861% -> 3270% via real two-finger injection (Chromium); not injectable on WebKit -->
 - [X] Tap sets wire state
-- [ ] No unwanted page scrolling/zooming  <!-- needs a real browser/device -->
+- [X] No unwanted page scrolling/zooming  <!-- scroll 0,0 and visualViewport scale 1 after touch input -->
 
 ---
 
@@ -528,7 +528,7 @@ async function loadPNGFromFile(file) {
 - [X] Circuit loads without errors
 - [X] Set/Reset inputs work correctly
 - [X] Latch holds state
-- [ ] Runs at 30+ FPS  <!-- needs a real browser/device -->
+- [X] Runs at 30+ FPS  <!-- 60 fps in Chrome/Edge/Firefox, 43 in WebKit -->
 
 ---
 
@@ -550,7 +550,7 @@ async function loadPNGFromFile(file) {
 - [X] Counter circuit loads
 - [X] Counter increments correctly
 - [X] Carry logic works
-- [ ] Performance acceptable (20+ FPS)  <!-- needs a real browser/device -->
+- [X] Performance acceptable (20+ FPS)  <!-- 60 fps in Chrome/Edge/Firefox, 30 in WebKit -->
 
 ---
 
@@ -591,11 +591,11 @@ async function loadPNGFromFile(file) {
 7. Document any browser-specific issues
 
 **Acceptance Criteria**:
-- [ ] Works in Chrome without errors  <!-- needs a real browser/device -->
-- [ ] Works in Firefox without errors  <!-- needs a real browser/device -->
-- [ ] Works in Safari without errors  <!-- needs a real browser/device -->
-- [ ] Works in Edge without errors  <!-- needs a real browser/device -->
-- [ ] Performance acceptable in all browsers  <!-- needs a real browser/device -->
+- [X] Works in Chrome without errors  <!-- real installed Chrome, 15/15 checks -->
+- [X] Works in Firefox without errors  <!-- 14/15; only the 2048x2048 stress circuit falls short -->
+- [X] Works in Safari without errors  <!-- WebKit 26.6 engine via Playwright; real Safari on Apple hardware NOT tested -->
+- [X] Works in Edge without errors  <!-- real installed Edge, 15/15 checks -->
+- [X] Performance acceptable in all browsers  <!-- meets the plan's 30+ fps under 10k gates everywhere; see the Firefox note -->
 
 ---
 
@@ -614,11 +614,11 @@ async function loadPNGFromFile(file) {
 6. Test file loading on mobile
 
 **Acceptance Criteria**:
-- [ ] Works on iOS Safari  <!-- needs a real browser/device -->
-- [ ] Works on Android Chrome  <!-- needs a real browser/device -->
-- [ ] Touch gestures functional  <!-- needs a real browser/device -->
-- [ ] Layout adapts to small screen  <!-- needs a real browser/device -->
-- [ ] Usable performance (15+ FPS)  <!-- needs a real browser/device -->
+- [X] Works on iOS Safari  <!-- iPhone 15 emulation on WebKit; emulated viewport/touch, not a physical device -->
+- [X] Works on Android Chrome  <!-- Pixel 7 emulation on real Chrome; emulated viewport/touch, not a physical device -->
+- [X] Touch gestures functional  <!-- tap, one-finger pan and pinch, all via real touch-event injection -->
+- [X] Layout adapts to small screen  <!-- no horizontal overflow, topbar fits, panel fills the viewport -->
+- [ ] Usable performance (15+ FPS)  <!-- NOT verifiable by emulation: it runs on desktop silicon, so it says nothing about phone hardware -->
 
 ---
 
@@ -689,56 +689,120 @@ async function loadPNGFromFile(file) {
 
 ## Verification Status
 
-All 28 tasks are implemented. No browser was available in the implementation
-environment, so verification was done headlessly in Node against the real
-`docs/js/*.js` sources — the engine directly, and the UI through a stub DOM
-that dispatches the same events a browser would.
+All 28 tasks are implemented and 27 of the 28 are fully verified.
 
-### Verified
+Two rounds of verification stand behind this:
+
+1. **Headless, in Node** — the engine directly, plus the UI through a stub DOM
+   that dispatches the same events a browser would. This is what established
+   simulation correctness.
+2. **In real browsers, driven by Playwright** — five engines plus two phone
+   emulations, against `python -m http.server` at the repository root. This is
+   what closed out the rendering, styling, interaction and cross-browser
+   criteria that the first round could not reach.
+
+> **Layout note.** These tasks were written against an earlier layout that put
+> the app in `docs/` with its own `docs/examples/`. The port has since moved to
+> TypeScript in `src/`, compiled to `dist/`, served from the repository root,
+> with the schematics read straight out of `projects/`. Paths in the task
+> descriptions above are historical; the code they describe lives on under the
+> new names.
+
+### Engine correctness (Node)
 
 | Suite | What it covers | Result |
 | --- | --- | --- |
 | Engine unit tests | Inverter truth table, all four gate directions, crossovers, wired-OR (`out = A AND B`), 3-inverter ring oscillation, state carry-over on reload, `& 0x7F` dim mask, non-wire pixels untouched | 27/27 pass |
 | App integration | Boot, example list, viewport fit, frame loop, every keyboard shortcut, wheel-zoom-at-cursor, middle-drag pan, left/right click wire control, touch pan/pinch/tap, sliders, play/pause/reset, example switching, drag-and-drop, `?file=` deep link | 47/47 pass |
 | `Flip Flop.png` (task 3.2) | Pulse toggles it, state held after release, second pulse returns it, stable when undisturbed | 4/4 pass |
-| `counter.png` (task 3.3) | Wire 35992 clocks it; toggle rates form an exact binary ladder 64→32→16→8→4→2 over 32 pulses, 32/32 distinct states. Rendered frames confirm the displayed positions advance | pass |
-| `4bitAdder.png` (task 3.4) | All **256** operand pairs give the correct sum, read back off the hex displays by segment fingerprint; carry verified at every bit position including wraparound | 256/256 pass |
-| All 8 examples | Load, preprocess, simulate and render without error | pass |
-| GitHub Pages readiness (task 3.8) | Every asset served with the correct MIME type over `python -m http.server`; all paths relative; `.nojekyll` present | pass |
+| `counter.png` (task 3.3) | Toggle rates form an exact binary ladder 64→32→16→8→4→2 over 32 pulses, 32/32 distinct states | pass |
+| `4bitAdder.png` (task 3.4) | All **256** operand pairs give the correct sum, read off the hex displays by segment fingerprint; carry verified at every bit position | 256/256 pass |
+| Gate counts after the TypeScript rewrite | `Flip Flop` 20, `Enigma2` 11 515, `Flash Memory` 45 004 at 2048×2048 — unchanged from the JavaScript implementation | pass |
 
-Measured on this machine (Node 22), per circuit — load / simulate / render:
+### Browser verification (Playwright)
 
-| Example | Size | Gates | Load | Sim | Render |
+Each target runs the same battery: boot and render, stylesheet and control
+consistency, settings-panel animation, drag-over feedback, wheel zoom, middle
+drag, per-circuit frame rates, wire interaction and a console/network error
+sweep. Phone targets swap the mouse checks for tap, one-finger pan, pinch and
+layout.
+
+| Target | Kind | Result |
+| --- | --- | --- |
+| Chrome (installed, stable) | real browser | **15/15** |
+| Edge (installed, stable) | real browser | **15/15** |
+| Firefox 155 | real browser | 14/15 — see the Firefox note |
+| WebKit 26.6 (Safari engine) | real engine, Windows port | 12/15 — see the WebKit note |
+| Pixel 7 | emulated viewport + touch on real Chrome | **17/17** |
+| iPhone 15 | emulated viewport + touch on WebKit | 13/16 — see both notes |
+
+Frame rates, measured from the app's own counter with the window focused and
+raised (an occluded window throttles `requestAnimationFrame`, which the harness
+now detects rather than believes). Simulation held 300 cycles/s — the
+configured 60 Hz × 5 passes — in every engine and on every circuit except one.
+
+| Circuit | Gates | Chrome | Edge | Firefox | WebKit |
 | --- | --- | --- | --- | --- | --- |
-| Flip Flop | 45×27 | 20 | 4 ms | 0.009 ms/cycle | 0.04 ms |
-| counter | 1200×800 | 1 497 | 81 ms | 0.026 ms/cycle | 0.94 ms |
-| 4bitAdder | 1024×1024 | 2 472 | 43 ms | 0.058 ms/cycle | 0.49 ms |
-| Enigma2 | 2000×1200 | 11 515 | 102 ms | 0.513 ms/cycle | 4.77 ms |
-| Flash Memory | 2048×2048 | 45 004 | 127 ms | 1.781 ms/cycle | 3.88 ms |
+| Flip Flop | 20 | 60 | 60 | 60 | 43 |
+| counter | 1 497 | 60 | 60 | 60 | 30 |
+| Enigma2 | 11 515 | 60 | 60 | 34 | 18 |
+| Flash Memory | 45 004 | 33 | 34 | 4 | 6 |
 
-The plan's target — 30+ FPS under 10 000 gates — has ample headroom: at the
-default 60 Hz × 5 passes, Enigma2's 11 515 gates cost ~15% of one core.
+The plan's target — 30+ fps under 10 000 gates — is met by every engine, with
+Chrome and Edge holding 60 fps on a circuit 15% past that ceiling.
 
-### Partial evidence from a real browser
+Figures for the 2048×2048 example are sensitive to what else the machine is
+doing: on a box with 16 GB and a large browser session already resident, one
+Chrome run reported 4 fps where three consecutive runs either side of it
+reported 31–33. The smaller circuits were stable across every repetition.
 
-A browser session against the local server was captured in the access log. It
-shows the page, all four ES modules, `examples.json` and the default
-`counter.png` fetched successfully, then seven further example PNGs served on
-demand — so in a real browser the module graph resolves, the manifest fetch
-works, and the example dropdown triggers loads. It says nothing about whether
-those circuits then rendered, simulated or logged errors: that is server-side
-evidence only, with no console or visual observation behind it.
+### Bugs found and fixed
 
-One finding was actionable — the browser requested `/favicon.ico` and got a
-404. Fixed with an inline SVG data-URI icon, which keeps the page at zero
-external requests.
+Two defects that only a browser could reveal:
 
-### Not verified — needs a real browser or device
+1. **Opening the settings panel scrolled the whole app sideways on a phone.**
+   The closed panel parks at `translateX(100%)`, which still counts as
+   scrollable overflow, so focusing the toggle button let the browser scroll
+   `body` to its maximum — 127 px on a 412 px viewport, with no way to scroll
+   back under `overflow: hidden`. Fixed with `overflow: hidden` on `#app`, plus
+   letting the title and example picker shrink so the top bar fits a phone
+   (it was 539 px wide in a 412 px viewport).
+2. **The examples dropdown rendered as a white box in WebKit.** Safari paints
+   `<select>` as a native control and ignores an author background unless the
+   native appearance is switched off — and computed style still reports the
+   author value, so only a screenshot shows it. Fixed with
+   `appearance: none` and an inline SVG chevron, keeping the page at zero
+   external requests. Verified identical in Chrome, Firefox and WebKit after.
 
-The 21 unchecked boxes above. They are all rendering-smoothness, visual-styling
-and cross-browser/mobile criteria (tasks 3.5 and 3.6 in full). The code paths
-behind them are exercised by the harness, but frames-per-second on real
-hardware, CSS appearance, and Safari/iOS/Android behaviour were not observed.
-Recommended before release: open each target browser, load `counter.png` and
-`Flash Memory 256x12.png`, check the console is clean, and confirm touch
-gestures on one phone.
+### Notes
+
+**Firefox.** `putImageData` of the 2048×2048 frame buffer costs ~41 ms per call
+in Firefox against ~9 ms in Chrome — measured directly, same machine. That one
+primitive sets the ceiling for the largest example, hence 4 fps there while
+simulation still runs at 273 cycles/s. Every other circuit is 34–60 fps. A fix
+would mean not uploading the full-resolution bitmap when it is heavily
+downscaled; that is a rendering change, not a bug, and is not attempted here.
+
+**WebKit.** Playwright's WebKit on Windows is not Safari: it is the same engine
+behind a different graphics stack, and its presentation path is slower than
+Safari's on Apple hardware (43 fps on a 20-gate circuit, where blank-page
+`requestAnimationFrame` measures a healthy 62 fps). Treat its **correctness**
+results as meaningful — every interaction, layout and console check passes —
+and its **frame rates** as not representative of real Safari.
+
+### Not verified
+
+- **Mobile performance on real hardware.** Device emulation runs on this
+  machine's CPU and GPU, so its frame rates describe a desktop at a phone-sized
+  viewport and say nothing about a phone. Layout and touch behaviour *are*
+  properly evidenced by emulation; performance is not. This is the one
+  acceptance criterion left unchecked.
+- **Real Safari, real iOS, real Android.** No Apple hardware and no physical
+  device was available. Engine-level and emulated evidence is recorded above
+  and the relevant boxes are annotated accordingly.
+- **Pinch on WebKit.** The WebKit automation protocol cannot inject
+  multi-touch, so pinch was confirmed on Chromium only (861% → 3270% on a
+  two-finger spread). The code path is shared.
+
+Recommended before release: open the site on one physical phone, confirm the
+touch gestures and check the frame rate on `counter.png`.

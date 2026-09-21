@@ -31,6 +31,11 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  /* The closed settings panel parks itself at translateX(100%), one viewport
+     to the right. That still counts as scrollable overflow, so without this
+     the browser can scroll the whole shell sideways to "reveal" it — which it
+     does on a narrow screen the moment the toggle button takes focus. */
+  overflow: hidden;
 }
 
 #topbar,
@@ -99,10 +104,36 @@ select {
   white-space: nowrap;
 }
 
-button:hover,
-select:hover {
+/* Safari paints <select> as a native control and ignores the background above
+   unless the native appearance is switched off — without this the examples
+   dropdown shows up as a white box in the dark bar. Turning it off also takes
+   the native arrow away, so draw one (inline, to keep the page at zero
+   external requests). */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238b93a3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px 6px;
+}
+
+/* The dark popup list itself, for the browsers that honour it. */
+select option {
+  background: var(--panel);
+  color: var(--ink);
+}
+
+button:hover {
   border-color: #3a4354;
   background: #242b39;
+}
+
+/* background-color, not the shorthand — the shorthand would drop the arrow. */
+select:hover {
+  border-color: #3a4354;
+  background-color: #242b39;
 }
 
 button:focus-visible,
@@ -355,6 +386,21 @@ kbd {
   button,
   select {
     padding: 8px 10px;
+  }
+
+  /* Phone widths cannot fit the bar at its natural size, and nothing in it
+     shrinks by default — so the row used to run off the edge. Let the title
+     and the example picker give way instead; the buttons stay full size. */
+  #title {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #examples {
+    flex: 0 1 auto;
+    min-width: 3.5em;
   }
 
   #settings {
