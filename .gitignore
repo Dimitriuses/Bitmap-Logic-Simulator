@@ -1,0 +1,17 @@
+node_modules/
+
+# Build output — the Pages workflow runs `npm run build` and publishes the
+# result, so compiled JavaScript is never committed.
+dist/
+_site/
+
+# Desktop build leftovers (Delphi)
+BmpLogicSim150902/*.dcu
+BmpLogicSim150902/__history/
+BmpLogicSim150902/Win32/
+
+*.local
+.DS_Store
+Thumbs.db
+
+*.claude/skills

@@ -1,0 +1,19 @@
+{
+  "name": "bitmap-logic-simulator",
+  "version": "1.0.0",
+  "description": "A logic simulator where PNG images are the circuits: bright pixels are wires, plus shapes are inverters.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "examples": "node scripts/gen-examples.mjs",
+    "build": "npm run examples && tsc",
+    "watch": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "serve": "python -m http.server 8000",
+    "start": "npm run build && npm run serve"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}

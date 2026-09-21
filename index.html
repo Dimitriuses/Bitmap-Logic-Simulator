@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0d11" />
+    <meta
+      name="description"
+      content="Bitmap Logic Simulator in the browser: PNG images are the circuits. Bright pixels are wires, plus-shaped patterns are inverters."
+    />
+    <title>Bitmap Logic Simulator</title>
+    <!-- Inline so the page still makes zero external requests, and so browsers
+         stop asking for a favicon.ico that is not there. -->
+    <link
+      rel="icon"
+      href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="%230b0d11"/><g fill="%235ec8f2"><rect x="1" y="7" width="5" height="2"/><rect x="10" y="7" width="5" height="2"/><rect x="7" y="1" width="2" height="5"/><rect x="7" y="10" width="2" height="5"/></g></svg>'
+    />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="topbar">
+        <span id="title">Bitmap Logic Simulator<small>the picture is the circuit</small></span>
+        <span class="spacer"></span>
+        <select id="examples" aria-label="Example schematics">
+          <option value="">Examples…</option>
+        </select>
+        <button id="play" class="primary" type="button">⏸ Pause</button>
+        <button id="settings-toggle" type="button" aria-expanded="false" aria-controls="settings">
+          Settings
+        </button>
+      </div>
+
+      <div id="stage">
+        <canvas id="view"></canvas>
+        <div id="dropzone">Drop a PNG schematic</div>
+        <div id="toast" role="status" aria-live="polite"></div>
+
+        <aside id="settings" aria-label="Settings">
+          <header>
+            <h2>Settings</h2>
+            <button id="settings-close" type="button" aria-label="Close settings">×</button>
+          </header>
+
+          <div class="group">
+            <h3>Circuit</h3>
+            <div class="row">
+              <button id="open-file" type="button">Open File…</button>
+              <button id="reset" type="button">↻ Reset</button>
+            </div>
+            <span id="file-name">—</span>
+            <p id="live-note"></p>
+          </div>
+
+          <div class="group">
+            <h3>Simulation</h3>
+            <div class="field">
+              <label for="speed">Speed <b id="speed-value">60 Hz</b></label>
+              <input id="speed" type="range" min="1" max="120" step="1" value="60" />
+            </div>
+            <div class="field">
+              <label for="passes">Passes per tick <b id="passes-value">5×</b></label>
+              <input id="passes" type="range" min="1" max="100" step="1" value="5" />
+            </div>
+            <div class="field">
+              <label for="refresh">File poll <b id="refresh-value">500 ms</b></label>
+              <input id="refresh" type="range" min="100" max="3000" step="100" value="500" />
+            </div>
+          </div>
+
+          <div class="group">
+            <h3>View</h3>
+            <div class="row">
+              <button id="fit" type="button">Fit to window</button>
+            </div>
+            <p class="hint">Zoom <b id="zoom-value">100%</b></p>
+          </div>
+
+          <div class="group">
+            <h3>Controls</h3>
+            <div class="hint">
+              <dl>
+                <dt><kbd>Esc</kbd></dt>
+                <dd>Toggle this panel</dd>
+                <dt><kbd>Space</kbd></dt>
+                <dd>Pause / resume</dd>
+                <dt><kbd>R</kbd></dt>
+                <dd>Reset the circuit</dd>
+                <dt><kbd>F</kbd></dt>
+                <dd>Fit to window</dd>
+                <dt><kbd>+</kbd> <kbd>−</kbd></dt>
+                <dd>Zoom</dd>
+                <dt>Wheel</dt>
+                <dd>Zoom at the cursor</dd>
+                <dt>Middle drag</dt>
+                <dd>Pan</dd>
+                <dt>Left click</dt>
+                <dd>Hold a wire HIGH</dd>
+                <dt>Right click</dt>
+                <dd>Toggle a wire</dd>
+              </dl>
+              <p>
+                Manual states only stick on wires no gate drives — everything else is rewritten
+                every cycle.
+              </p>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <div id="statusbar">
+        <span class="stat"><b id="stat-size">—</b> px</span>
+        <span class="stat"><b id="stat-wires">—</b> wires</span>
+        <span class="stat"><b id="stat-gates">—</b> gates</span>
+        <span class="stat">cycle <b id="stat-cycle">0</b></span>
+        <span class="stat"><b id="stat-rate">—</b></span>
+        <span class="stat"><b id="stat-fps">—</b></span>
+        <span class="keys">
+          <kbd>Space</kbd> pause · <kbd>Esc</kbd> settings · wheel zoom · middle drag pan · left
+          click = HIGH · right click = toggle
+        </span>
+      </div>
+    </div>
+
+    <!-- Compiled from src/ by `npm run build`; see README.md. -->
+    <script type="module" src="./dist/main.js"></script>
+  </body>
+</html>
