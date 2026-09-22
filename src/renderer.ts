@@ -112,7 +112,11 @@ export interface Overlay {
   readonly selection?: Rect | null;
   /** A paste that is floating over the document but not part of it. */
   readonly floating?: { block: PixelBlock; x: number; y: number } | null;
-  /** The keyboard cursor, drawn only while it is driving. */
+  /**
+   * The app's pointer position, drawn only when the arrow keys have moved it
+   * away from the physical cursor. A browser cannot move the real cursor, so
+   * this marker is the only thing telling the user where clicks will land.
+   */
   readonly cursor?: Point | null;
 }
 
@@ -312,8 +316,9 @@ export class Renderer {
       );
     }
 
-    // The keyboard cursor is deliberately louder than the hover outline: its
-    // presence is the only thing telling the user that Space now paints.
+    // Deliberately louder than the hover outline: it appears only when the
+    // app's pointer has been nudged away from the physical cursor, and that
+    // divergence is the one genuinely confusing thing about arrow nudging.
     if (overlay.cursor) {
       ctx.strokeStyle = '#ffd166';
       ctx.lineWidth = Math.max(2, d * 2);

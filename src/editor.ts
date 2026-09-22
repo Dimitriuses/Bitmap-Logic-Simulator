@@ -1,4 +1,4 @@
-// editor.ts — mode, tools, selection, paste and the keyboard cursor.
+// editor.ts — mode, tools, selection, paste and pointer routing.
 //
 // The left mouse button cannot both paint a pixel and pulse a wire, so there is
 // an explicit mode. In Simulate mode every handler here returns false and the
@@ -59,10 +59,6 @@ export class Editor {
   /** Pointer offset within a floating block while it is being dragged. */
   #grabOffset: { dx: number; dy: number } | null = null;
 
-  /** Keyboard cursor. Visible exactly while active — see keymap.ts. */
-  cursor: PixelPoint = { x: 0, y: 0 };
-  cursorActive = false;
-
   /**
    * @param onCommit called after anything that changed pixels, so the host can
    *   recompile exactly once per completed action.
@@ -120,10 +116,8 @@ export class Editor {
     this.#active = null;
     this.#pointerId = null;
     this.#grabOffset = null;
-    this.cursorActive = false;
     this.clipboard.resetForDocument();
     this.#doc = doc;
-    if (doc) this.cursor = { x: doc.width >> 1, y: doc.height >> 1 };
   }
 
   /**
@@ -246,42 +240,26 @@ export class Editor {
   }
 
   // ---------------------------------------------------------------------
-  // Keyboard cursor
+  // Pointer nudging
   // ---------------------------------------------------------------------
 
-  activateCursor(dx: number, dy: number): void {
-    this.cursorActive = true;
-    this.moveCursor(dx, dy);
-  }
-
-  moveCursor(dx: number, dy: number): void {
-    const doc = this.#doc;
-    if (!doc) return;
-    this.cursor = {
-      x: Math.min(doc.width - 1, Math.max(0, this.cursor.x + dx)),
-      y: Math.min(doc.height - 1, Math.max(0, this.cursor.y + dy)),
-    };
-  }
-
-  deactivateCursor(): void {
-    this.cursorActive = false;
-  }
-
   /**
-   * Apply the current tool at the keyboard cursor, through the same
-   * down/up path a pointer click uses — so a keyboard-drawn pixel is
-   * indistinguishable from a mouse-drawn one, including in undo.
+   * Move the pointer to a pixel, the way a mouse move would.
+   *
+   * A browser cannot move the physical cursor, so the app keeps its own pointer
+   * position and the arrow keys drive that. While a button is held this feeds
+   * the active tool, which is what makes "hold the pencil and tap an arrow"
+   * draw exactly one pixel — the precision case the mouse is bad at.
+   *
+   * Returns true when it fed a stroke, so the caller knows to repaint.
    */
-  applyAtCursor(): boolean {
-    const ctx = this.#context('primary');
-    const tool = this.#tools.get(this.#toolId);
-    if (!ctx || !tool || !tool.mutates) return false;
-    ctx.doc.beginStroke(tool.label(ctx));
-    tool.down(this.cursor, ctx);
-    tool.up(this.cursor, ctx);
-    const edit = ctx.doc.endStroke();
-    if (edit) this.onCommit();
-    return edit !== null;
+  nudgeTo(p: PixelPoint): boolean {
+    const tool = this.#active;
+    if (!tool) return false;
+    const ctx = this.#context(this.#activeButton);
+    if (!ctx) return false;
+    tool.move(p, ctx);
+    return true;
   }
 
   // ---------------------------------------------------------------------
@@ -300,9 +278,6 @@ export class Editor {
     // A tool that does nothing with the right button consumes it anyway: in
     // edit mode the right button must never fall through to wire toggling.
     if (button === 'secondary' && !tool.usesSecondary) return true;
-
-    // The pointer takes over from the keyboard cursor.
-    this.cursorActive = false;
 
     this.#active = tool;
     this.#activeButton = button;

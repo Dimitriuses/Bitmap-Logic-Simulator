@@ -91,7 +91,14 @@ class App {
   private tapCandidate: TapCandidate | null = null;
   /** World point of the wire being pulsed by the left button, simulate mode only. */
   private held: Point | null = null;
+  /**
+   * The app's pointer position in bitmap pixels. Driven by the mouse, and by
+   * the arrow keys — a browser cannot move the physical cursor, so this is the
+   * only pointer the editor has.
+   */
   private hover: PixelPoint | null = null;
+  /** True once the arrows have moved the pointer away from the real cursor. */
+  private nudged = false;
   private dirty = false;
   /** Consecutive auto-repeats of a held arrow key, for acceleration. */
   private repeats = 0;
@@ -456,7 +463,7 @@ class App {
       if (this.running) this.togglePlay(false);
     } else if (mode === 'simulate' && wasEditing) {
       this.editor.cancelPaste();
-      this.editor.deactivateCursor();
+      this.nudged = false;
       if (this.runningBeforeEdit !== null) this.togglePlay(this.runningBeforeEdit);
       this.runningBeforeEdit = null;
       this.dirty = true;
@@ -589,6 +596,18 @@ class App {
     return { x: Math.floor(w.x), y: Math.floor(w.y) };
   }
 
+  /**
+   * Where the editor should act for this event.
+   *
+   * Once the arrows have nudged the pointer, the app's position is the real one
+   * and the physical cursor is stale — clicking has to act where the marker is,
+   * not where the mouse happens to be sitting. Any real mouse movement clears
+   * the flag, so this only diverges while the keyboard is driving.
+   */
+  #actionPixel(e: PointerEvent): PixelPoint {
+    return this.nudged && this.hover ? this.hover : this.#pixelAt(e);
+  }
+
   /** Bitmap pixel at the centre of the view — where a paste lands by default. */
   #viewCentre(): PixelPoint {
     const w = this.viewport.toWorld(this.viewport.canvasWidth / 2, this.viewport.canvasHeight / 2);
@@ -623,8 +642,9 @@ class App {
       }
 
       this.lastMouse = this.#local(e);
+      if (this.editor.mode === 'edit' && !this.nudged) this.hover = this.#pixelAt(e);
 
-      if (this.editor.handlePointerDown(e, this.#pixelAt(e))) {
+      if (this.editor.handlePointerDown(e, this.#actionPixel(e))) {
         this.dirty = true;
         this.#applyEditorToInputs();
         return;
@@ -669,10 +689,10 @@ class App {
       this.lastMouse = now;
 
       if (this.editor.mode === 'edit') {
+        // Moving the real mouse takes the pointer back from the arrow keys.
         this.hover = this.#pixelAt(e);
-        // The pointer reclaims control from the keyboard cursor.
-        if (this.editor.cursorActive) {
-          this.editor.deactivateCursor();
+        if (this.nudged) {
+          this.nudged = false;
           this.dirty = true;
         }
         if (this.editor.handlePointerMove(e, this.hover)) {
@@ -699,7 +719,7 @@ class App {
         return;
       }
 
-      if (this.editor.handlePointerUp(e, this.#pixelAt(e))) {
+      if (this.editor.handlePointerUp(e, this.#actionPixel(e))) {
         this.dirty = true;
         this.#applyEditorToInputs();
         return;
@@ -771,7 +791,6 @@ class App {
         {
           mode: this.editor.mode,
           hasFloating: this.editor.floating !== null,
-          cursorActive: this.editor.cursorActive,
           hasSelection: this.editor.selection !== null,
         }
       );
@@ -794,25 +813,43 @@ class App {
     return Math.min(MAX_STEP, 1 + Math.floor(this.repeats / REPEAT_RAMP));
   }
 
+  /**
+   * Move the app's pointer by whole pixels.
+   *
+   * A browser cannot move the physical cursor, so the editor keeps its own
+   * pointer position and the arrows drive that. With a button held, the move is
+   * fed to the active tool exactly as a mouse move would be — which is what
+   * makes holding the pencil and tapping an arrow draw one pixel at a time.
+   *
+   * Because the real cursor stays put, the marker in the overlay becomes the
+   * only indication of where clicks will land; that is why `nudged` is tracked
+   * and the marker only appears once the arrows have been used.
+   */
+  #nudgePointer(dx: number, dy: number): void {
+    const doc = this.doc;
+    if (!doc) return;
+
+    // With no prior pointer position, start from the middle of the view rather
+    // than an arbitrary corner.
+    const from = this.hover ?? this.#viewCentre();
+    const next: PixelPoint = {
+      x: Math.min(doc.width - 1, Math.max(0, from.x + dx)),
+      y: Math.min(doc.height - 1, Math.max(0, from.y + dy)),
+    };
+    if (next.x === from.x && next.y === from.y && this.nudged) return;
+
+    this.hover = next;
+    this.nudged = true;
+    this.editor.nudgeTo(next);
+  }
+
   /** Returns true when the default action should be suppressed. */
   #perform(action: NonNullable<InputAction>): boolean {
     const step = this.#step();
     switch (action.kind) {
       case 'move':
         if (action.target === 'paste') this.editor.moveFloating(action.dx * step, action.dy * step);
-        else this.editor.moveCursor(action.dx * step, action.dy * step);
-        this.dirty = true;
-        return true;
-      case 'activateCursor':
-        this.editor.activateCursor(action.dx * step, action.dy * step);
-        this.dirty = true;
-        return true;
-      case 'deactivateCursor':
-        this.editor.deactivateCursor();
-        this.dirty = true;
-        return true;
-      case 'applyTool':
-        this.editor.applyAtCursor();
+        else this.#nudgePointer(action.dx * step, action.dy * step);
         this.dirty = true;
         return true;
       case 'commit':
@@ -933,7 +970,7 @@ class App {
       showGrid: editing,
       selection: editing ? this.editor.selection : null,
       floating: editing ? this.editor.floating : null,
-      cursor: editing && this.editor.cursorActive ? this.editor.cursor : null,
+      cursor: editing && this.nudged ? this.hover : null,
     };
   }
 

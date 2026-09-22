@@ -30,7 +30,7 @@ Headless, and the first thing to run.
 | 45°, shallow and steep runs | exactly **1** net each — today they give 9, 5 and 5 |
 | Horizontal and vertical runs | pixel-identical to the current output |
 | Consecutive pixels from `walkConnected` | differ on one axis, by one |
-| A→B versus B→A | same pixel set |
+| A→B versus B→A | same length, same endpoints, connected either way |
 
 Then in the browser: drag the pencil fast diagonally across empty space and confirm the
 wire count rises by exactly one. Speed matters — the bug only shows when pointer events
@@ -109,32 +109,41 @@ choice stuck.
 
 ---
 
-## Scenario 7 — Keyboard cursor (US7)
+## Scenario 7 — Pointer nudging (US7, SC-011)
 
-1. In edit mode, press an arrow key.
+A browser cannot move the physical cursor, so the editor keeps its own pointer and the
+arrows drive that. Check both halves:
 
-**Expect**: a cursor appears and moves exactly one pixel. Held, it repeats and accelerates.
+1. In edit mode, pick the pencil, **hold the left button**, and press an arrow.
 
-2. Press the apply key.
+**Expect**: exactly one pixel is added in that direction, as if the mouse had moved one
+pixel. Hold the arrow and it keeps going, faster the longer it is held.
 
-**Expect**: the active tool acts on exactly the pixel under the cursor — verify by checking
-*that* pixel changed, not merely that something did.
+2. Release, press an arrow a few times without any button held.
 
-3. Move the mouse over the canvas.
+**Expect**: a marker moves one pixel per press. The physical cursor does not move — it
+cannot — which is exactly why the marker is drawn.
 
-**Expect**: the cursor gives way and pointer drawing resumes.
+3. Click without moving the mouse.
 
-4. With the cursor inactive, press <kbd>Space</kbd>.
+**Expect**: the click acts **where the marker is**, not where the physical cursor sits.
 
-**Expect**: it pauses, as it always has. This is the conflict resolution from research R4,
-and it is worth checking in both states.
+4. Move the real mouse.
+
+**Expect**: the pointer snaps back to it and the marker disappears.
+
+5. Press <kbd>Space</kbd>, in any state at all.
+
+**Expect**: it pauses or resumes. There is no apply key, so Space is never overloaded —
+worth checking with a paste floating, with a selection, and with neither.
 
 ---
+
 
 ## Scenario 8 — Key precedence (SC-009)
 
 Exhaustive and headless: every key in the precedence table against every combination of
-floating paste / keyboard cursor / selection, in both modes. The table in
+floating paste and selection, in both modes. The table in
 [contracts/input.md](./contracts/input.md) is the expected-value table.
 
 Worth confirming by hand afterwards, because it is the part users feel: with a paste
@@ -173,3 +182,4 @@ a same-session A/B, not against numbers recorded on another day.
 | SC-008 palette colours are valid | 3 |
 | SC-009 key precedence | 8 |
 | SC-010 schematics unchanged | 9 |
+| SC-011 one arrow press, one pixel | 7 |

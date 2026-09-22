@@ -104,46 +104,59 @@ the axis-aligned buses that are the common case, making tight schematics harder 
 
 ---
 
-## R4. Space cannot mean both "pause" and "paint"
+## R4. The arrows move the pointer, not a cursor of their own
 
-**Conflict**: the two answers given for this feature collide. Edit mode is to keep Space
-working as pause, so a user can deliberately run a circuit while editing it (FR-005). The
-keyboard cursor is to apply the tool with Space (FR-024). Same key, same mode.
+**First attempt**: the arrows drove a separate keyboard cursor and Space applied the tool
+at it. That put Space in conflict with pause, which edit mode is supposed to keep, and the
+conflict had to be arbitrated by a visibility rule: Space paints while the cursor is on
+screen, pauses while it is not. It worked, and it was the subtlest rule in the design.
 
-**Decision**: the keyboard cursor is a state, not a mode, and it arbitrates. It becomes
-active when the user first presses an arrow key in edit mode, and it is visible whenever it
-is active. While it is active, Space applies the tool. While it is not, Space pauses, as it
-always has. Moving the mouse over the canvas deactivates it, as does Escape.
+**Decision**: the arrows move the editor's *pointer* instead. While a button is held, a
+nudge feeds the active tool exactly as a mouse move does — so holding the pencil and
+tapping an arrow draws one pixel, which is the precision case the mouse is bad at and the
+reason to want this at all.
 
-This satisfies both requirements without a third key, and the rule is discoverable because
-the cursor is drawn: if you can see the cursor, Space paints at it.
+**Why this is better**: there is no apply key, so Space is never overloaded and the
+arbitration rule disappears. It is also how the user already works: you press the button
+you would press anyway, and steer.
+
+**The platform constraint, stated plainly**: a browser cannot move the operating system's
+cursor. No API exists, and Pointer Lock only hides it and reports relative motion. So the
+editor keeps its own pointer position and the physical cursor stays where it is. The two
+can therefore diverge, which is the one genuinely confusing thing here, and the reason a
+marker is drawn as soon as the arrows are used and removed the moment the real mouse
+moves. Clicks act on the editor's pointer, so what the marker shows is what happens.
 
 **Alternatives considered**:
 
-- *A separate apply key* (Enter, or Insert). Enter is taken by paste confirmation, and a
-  rarely-used key would be worse than the arbitration above.
-- *Space always paints in edit mode.* Simpler, and it silently removes the ability the
-  pause answer explicitly asked to keep.
+- *Pointer Lock*, which hides the real cursor and would make the app's pointer the only
+  one. It removes the divergence entirely and costs a mode the user has to enter and
+  escape, over a marker that solves the same problem. Rejected as disproportionate.
+- *Keeping the separate cursor and moving apply to Enter.* Enter is the paste-commit key
+  and the platform's button-activation key; see KM-7.
 
 ---
+
 
 ## R5. One precedence order for the overloaded keys
 
-Three features want Enter, Escape and the arrow keys. Rather than let each grab what it
+Several features want Enter, Escape and the arrow keys. Rather than let each grab what it
 can, there is one chain, innermost first:
 
-| Key | Floating paste | Keyboard cursor active | Selection exists | Otherwise |
+| Key | Floating paste | Selection exists | Edit mode | Simulate mode |
 | --- | --- | --- | --- | --- |
-| Arrows | move the paste | move the cursor | *(cursor activates)* | *(cursor activates)* |
+| Arrows | move the paste | move the pointer | move the pointer | — |
 | Enter | commit the paste | — | — | — |
-| Escape | cancel the paste | deactivate the cursor | clear the selection | toggle settings |
-| Space | — | apply the tool | pause | pause |
-| Delete | — | — | clear the region | — |
+| Escape | cancel the paste | clear the selection | toggle settings | toggle settings |
+| Delete | — | clear the region | — | — |
+| Space | pause | pause | pause | pause |
 
 Escape keeps its existing meaning only when nothing else is open, which matches how every
-other application treats it. FR-026 is this table.
+other application treats it. Space is deliberately constant across the whole table: R4
+removed the apply key that used to compete for it. FR-026 is this table.
 
 ---
+
 
 ## R6. The clipboard stays inside the page
 

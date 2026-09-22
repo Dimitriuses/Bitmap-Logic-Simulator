@@ -12,25 +12,28 @@ specification (FR-026). It is evaluated top to bottom; the first row that applie
 
 | State | Arrows | Enter | Escape | Space | Delete |
 | --- | --- | --- | --- | --- | --- |
-| A floating paste exists | move it 1px | **commit** | **cancel** | — | — |
-| The keyboard cursor is active | move it 1px | — | deactivate it | **apply tool** | — |
-| A selection exists | *activate cursor* | — | clear selection | pause/resume | **clear region** |
-| Otherwise (incl. simulate mode) | *activate cursor* (edit mode only) | — | toggle settings | pause/resume | — |
+| A floating paste exists | move it 1px | **commit** | **cancel** | pause/resume | — |
+| A selection exists | move the pointer | — | clear selection | pause/resume | **clear region** |
+| Otherwise, edit mode | **move the pointer** 1px | — | toggle settings | pause/resume | — |
+| Simulate mode | — | — | toggle settings | pause/resume | — |
+
+**Space is not overloaded.** It pauses in every state. An earlier design had the
+arrows drive a separate keyboard cursor with Space applying the tool at it, which
+put Space in conflict with pause and needed a visibility rule to arbitrate.
+Moving the arrows onto the pointer itself removed the need for an apply key
+altogether: you hold the mouse button as you already would, and steer.
 
 ```ts
 export type InputContext = {
   readonly mode: 'simulate' | 'edit';
   readonly hasFloating: boolean;
-  readonly cursorActive: boolean;
   readonly hasSelection: boolean;
 };
 
 export type InputAction =
-  | { kind: 'move'; target: 'paste' | 'cursor'; dx: number; dy: number }
-  | { kind: 'commit' } | { kind: 'cancel' }
-  | { kind: 'activateCursor'; dx: number; dy: number }
-  | { kind: 'deactivateCursor' }
-  | { kind: 'applyTool' } | { kind: 'clearSelection' } | { kind: 'clearRegion' }
+  | { kind: 'move'; target: 'paste' | 'pointer'; dx: number; dy: number }
+  | { kind: 'commit' } | { kind: 'cancelPaste' }
+  | { kind: 'clearSelection' } | { kind: 'clearRegion' }
   | { kind: 'togglePause' } | { kind: 'toggleSettings' }
   | { kind: 'undo' } | { kind: 'redo' } | { kind: 'save' }
   | { kind: 'copy' } | { kind: 'cut' } | { kind: 'paste' }
@@ -45,9 +48,11 @@ export function resolveKey(e: KeyboardEvent, ctx: InputContext): InputAction;
   browser, which is the only way it stays correct as features are added.
 - **KM-2 — Escape keeps its old meaning last.** It toggles the settings panel only when
   nothing else is open, matching how every other application behaves.
-- **KM-3 — Space is unchanged unless the keyboard cursor is visible.** This is the
-  resolution of the conflict between "Space still pauses while editing" and "Space applies
-  the tool": if you can see the cursor, Space paints; otherwise it pauses (research R4).
+- **KM-3 — Space always pauses.** It is not in the precedence table at all. Nudging the
+  pointer with the arrows means a held mouse button is what makes them draw, so no apply
+  key is needed and Space keeps one meaning everywhere (research R4).
+- **KM-7b — Nudging is edit-mode only.** In simulate mode the arrows do nothing, so they
+  cannot disturb a circuit someone is only watching.
 - **KM-4 — Typing is never intercepted.** While focus is in an input or select, only the
   existing exceptions apply.
 - **KM-5 — Ctrl/Cmd combinations resolve before the table**: Z, Y, S, C, X, V.
@@ -73,20 +78,22 @@ export function resolveKey(e: KeyboardEvent, ctx: InputContext): InputAction;
   has deliberately tabbed to a button still activates it normally, because focus there was
   intentional.
 
-### Why the apply key is Space and not Enter
+### Why there is no apply key at all
 
-Both were considered. Enter loses on three counts:
+An earlier design had the arrows drive a separate keyboard cursor, which needed a key to
+apply the tool at it. Both candidates were poor:
 
-1. It is already the commit key. Giving it "apply tool" as well means one key with two
-   destructive meanings, separated only by whether a paste floats.
-2. Committing and applying would then be the *same keystroke in sequence* — commit a paste,
-   press Enter again from habit, and a pixel is painted.
-3. It is the platform's activation key, so it fights focused buttons as measured above.
+- **Space** already pauses, and edit mode is required to keep that. It worked only with a
+  rule arbitrating by whether the cursor was visible — the subtlest thing in the design.
+- **Enter** already commits a paste, so it would carry two destructive meanings separated
+  only by whether a paste floats; pressing it twice out of habit would paint a pixel. It is
+  also the platform's button-activation key, and so loses to a focused toolbar button
+  (KM-7).
 
-Space's overload is milder: its other meaning, pause, is non-destructive and instantly
-reversible. Its one wart is that with the cursor active, a user reaching for pause paints
-instead; Escape deactivates the cursor first, and the cursor being visible is the signal
-that Space has changed meaning.
+Moving the arrows onto the pointer itself removed the question. You hold the mouse button
+as you already would and steer with the arrows, so no key has to mean "apply", and Space
+keeps one meaning everywhere.
+
 
 ---
 
@@ -164,7 +171,7 @@ export class Palette {
 
 `resolveKey` is a pure function over a small state space, so the precedence table is
 checked exhaustively in `scripts/verify/keymap.mjs` — every key in the table against every
-combination of `hasFloating`, `cursorActive`, `hasSelection` and both modes. The table in
+combination of `hasFloating`, `hasSelection` and both modes. The table in
 this contract is the expected-value table for that check, which is the point of writing it
 as a table.
 

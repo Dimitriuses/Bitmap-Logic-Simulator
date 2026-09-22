@@ -115,7 +115,7 @@ circuits would deadlock.
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save the circuit |
 | <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd> | Copy, cut, paste a selection |
 | <kbd>Delete</kbd> | Clear the selected region |
-| Arrows | Move a floating paste, or the drawing cursor |
+| Arrows | Move a floating paste, or nudge the pointer one pixel |
 | <kbd>Enter</kbd> / <kbd>Escape</kbd> | Confirm or cancel a paste |
 | <kbd>+</kbd> <kbd>−</kbd> | Zoom |
 | Mouse wheel | Zoom at the cursor |
@@ -191,12 +191,16 @@ turn with the rotate buttons. Nothing is written until <kbd>Enter</kbd>;
 Rotation handles gates with no special cases: a gate's direction is encoded in
 which corners are wire, and those corners turn with the pixels.
 
-### Drawing without the mouse
+### Placing a pixel exactly
 
-Press an arrow key and a cursor appears, moving exactly one pixel per press and
-accelerating if you hold it. While that cursor is visible, <kbd>Space</kbd>
-applies the current tool at it; while it is not, <kbd>Space</kbd> pauses as it
-always has. Move the mouse and the cursor steps aside.
+Hold the mouse button and steer with the arrow keys: one press, one pixel, in
+whichever direction. Holding an arrow repeats and speeds up. It is the easy way
+to place the pixel a mouse keeps overshooting at high zoom.
+
+A web page cannot move the operating system's cursor, so the editor keeps its
+own pointer and the arrows move that. A marker shows where it is whenever it has
+drifted from the physical cursor, clicks act where the marker is, and moving the
+real mouse snaps everything back together.
 
 <kbd>Ctrl</kbd>+<kbd>Z</kbd> and <kbd>Ctrl</kbd>+<kbd>Y</kbd> undo and redo, one
 stroke at a time.

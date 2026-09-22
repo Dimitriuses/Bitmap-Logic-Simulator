@@ -1,9 +1,9 @@
 // keymap.mjs — the precedence table, checked exhaustively.
 //
-// Three features want Enter, Escape and the arrow keys. resolveKey is a pure
+// Several features want Enter, Escape and the arrow keys. resolveKey is a pure
 // function over a small state space, so rather than trusting a table in a
-// document, every key is checked against every combination of floating paste /
-// keyboard cursor / selection, in both modes. The expected values below are
+// selection, in both modes. The expected values below are contracts/input.md.
+// document, every key is checked against every combination of floating paste and
 // contracts/input.md transcribed.
 
 import { pathToFileURL } from 'node:url';
@@ -27,22 +27,17 @@ function expected(key, ctx) {
     if (key === 'Enter') return 'commit';
     if (key === 'Escape') return 'cancelPaste';
   }
-  if (!ctx.hasFloating && ctx.cursorActive) {
-    if (key === 'ArrowLeft') return 'move:cursor';
-    if (key === ' ') return 'applyTool';
-    if (key === 'Escape') return 'deactivateCursor';
-  }
   if (!ctx.hasFloating && ctx.hasSelection) {
     if (key === 'Delete') return 'clearRegion';
     if (key === 'Escape') return 'clearSelection';
   }
-  if (key === 'ArrowLeft' && !ctx.hasFloating && !ctx.cursorActive) {
-    return ctx.mode === 'edit' ? 'activateCursor' : 'none';
+  if (key === 'ArrowLeft' && !ctx.hasFloating) {
+    return ctx.mode === 'edit' ? 'move:pointer' : 'none';
   }
   if (key === 'Escape') return 'toggleSettings';
+  // Space always pauses. There is no apply key: the arrows move the pointer
+  // itself, so a held mouse button is what makes them draw.
   if (key === ' ') return 'togglePause';
-  if (key === 'Enter') return 'none';
-  if (key === 'Delete') return 'none';
   return 'none';
 }
 
@@ -57,19 +52,16 @@ let mismatches = [];
 
 for (const mode of ['simulate', 'edit']) {
   for (const hasFloating of [false, true]) {
-    for (const cursorActive of [false, true]) {
-      for (const hasSelection of [false, true]) {
-        const ctx = { mode, hasFloating, cursorActive, hasSelection };
-        for (const key of KEYS) {
-          cases++;
-          const got = describe(resolveKey(ev(key), ctx));
-          const want = expected(key, ctx);
-          if (got !== want) {
-            mismatches.push(
-              `${key} @ ${mode}/f=${hasFloating}/c=${cursorActive}/s=${hasSelection}: ` +
-                `want ${want}, got ${got}`
-            );
-          }
+    for (const hasSelection of [false, true]) {
+      const ctx = { mode, hasFloating, hasSelection };
+      for (const key of KEYS) {
+        cases++;
+        const got = describe(resolveKey(ev(key), ctx));
+        const want = expected(key, ctx);
+        if (got !== want) {
+          mismatches.push(
+            `${key} @ ${mode}/f=${hasFloating}/s=${hasSelection}: want ${want}, got ${got}`
+          );
         }
       }
     }
@@ -80,7 +72,7 @@ check(`  ${cases} state/key combinations`, mismatches.length === 0, mismatches.s
 
 console.log('\nModifier combinations\n');
 
-const base = { mode: 'edit', hasFloating: false, cursorActive: false, hasSelection: true };
+const base = { mode: 'edit', hasFloating: false, hasSelection: true };
 const ctrl = (key, mods = {}) => describe(resolveKey(ev(key, { ctrlKey: true, ...mods }), base));
 
 check('  Ctrl+Z is undo', ctrl('z') === 'undo', ctrl('z'));
@@ -97,21 +89,37 @@ check(
   describe(resolveKey(ev('c', { ctrlKey: true }), noSel)) === 'none'
 );
 
-console.log('\nThe Space conflict\n');
+console.log('\nSpace is never overloaded\n');
 
-// The whole point of making the keyboard cursor a visible state: while it is on
-// screen Space paints, and while it is not, Space pauses exactly as it always has.
-const cursorOn = { mode: 'edit', hasFloating: false, cursorActive: true, hasSelection: false };
-const cursorOff = { ...cursorOn, cursorActive: false };
-check('  Space applies the tool while the cursor is visible', describe(resolveKey(ev(' '), cursorOn)) === 'applyTool');
-check('  Space pauses while it is not', describe(resolveKey(ev(' '), cursorOff)) === 'togglePause');
+// An earlier design had the arrows drive a separate cursor with Space to apply
+// the tool at it, which put Space in conflict with pause. Moving the arrows onto
+// the pointer itself removed the need for an apply key, so Space means one thing
+// everywhere. This is the check that it stays that way.
+const cursorOff = { mode: 'edit', hasFloating: false, hasSelection: false };
+const everyState = [];
+for (const mode of ['simulate', 'edit'])
+  for (const hasFloating of [false, true])
+    for (const hasSelection of [false, true])
+      everyState.push({ mode, hasFloating, hasSelection });
+check(
+  '  Space pauses in every state',
+  everyState.every((c) => describe(resolveKey(ev(' '), c)) === 'togglePause')
+);
+check(
+  '  arrows in edit mode move the pointer',
+  describe(resolveKey(ev('ArrowLeft'), cursorOff)) === 'move:pointer'
+);
+check(
+  '  arrows in simulate mode do nothing',
+  resolveKey(ev('ArrowLeft'), { ...cursorOff, mode: 'simulate' }) === null
+);
 
 console.log('\nTyping is never intercepted\n');
 
 const typing = { key: ' ', ctrlKey: false, metaKey: false, shiftKey: false, targetTag: 'INPUT' };
 check('  Space in a text field is ignored', resolveKey(typing, cursorOff) === null);
 check(
-  '  arrows in a text field do not start the cursor',
+  '  arrows in a text field do not move the pointer',
   resolveKey({ ...typing, key: 'ArrowLeft' }, cursorOff) === null
 );
 

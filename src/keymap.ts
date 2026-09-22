@@ -1,10 +1,16 @@
 // keymap.ts — the one place a key decides what it means.
 //
-// Three features want Enter, Escape and the arrow keys: the floating paste, the
-// keyboard cursor, and the selection. If each grabbed what it could, Escape
+// Several features want Enter, Escape and the arrow keys: the floating paste,
+// the selection, and pointer nudging. If each grabbed what it could, Escape
 // would end up doing two things depending on which listener ran first. So there
 // is a single resolver, it is pure, and the precedence table in
 // contracts/input.md is its specification.
+//
+// Note Space is NOT in the table: it always pauses. An earlier design had the
+// arrows drive a separate keyboard cursor with Space to apply the tool at it,
+// which put Space in conflict with pause. Moving the arrows onto the pointer
+// itself removed the need for an apply key at all — you hold the mouse button
+// as usual and steer with the arrows.
 //
 // Being pure is the point: the whole table is checked exhaustively in
 // scripts/verify/keymap.mjs with no browser, which is the only way it stays
@@ -24,19 +30,15 @@ export interface KeyEventLike {
 export interface InputContext {
   readonly mode: 'simulate' | 'edit';
   readonly hasFloating: boolean;
-  readonly cursorActive: boolean;
   readonly hasSelection: boolean;
 }
 
 export type InputAction =
-  | { kind: 'move'; target: 'paste' | 'cursor'; dx: number; dy: number }
-  | { kind: 'activateCursor'; dx: number; dy: number }
+  | { kind: 'move'; target: 'paste' | 'pointer'; dx: number; dy: number }
   | { kind: 'commit' }
   | { kind: 'cancelPaste' }
-  | { kind: 'deactivateCursor' }
   | { kind: 'clearSelection' }
   | { kind: 'clearRegion' }
-  | { kind: 'applyTool' }
   | { kind: 'togglePause' }
   | { kind: 'toggleSettings' }
   | { kind: 'toggleMode' }
@@ -102,26 +104,19 @@ export function resolveKey(e: KeyEventLike, ctx: InputContext): InputAction {
     if (e.key === 'Escape') return { kind: 'cancelPaste' };
   }
 
-  // --- 2. The keyboard cursor. While it is visible, Space applies the tool;
-  // while it is not, Space pauses, exactly as it always has. That visibility is
-  // what makes the rule discoverable rather than surprising.
-  if (!ctx.hasFloating && ctx.cursorActive) {
-    if (arrow) return { kind: 'move', target: 'cursor', dx: arrow.dx, dy: arrow.dy };
-    if (e.key === ' ' && !typing) return { kind: 'applyTool' };
-    if (e.key === 'Escape') return { kind: 'deactivateCursor' };
-  }
-
-  // --- 3. A selection exists.
+  // --- 2. A selection exists.
   if (!ctx.hasFloating && ctx.hasSelection) {
     if (e.key === 'Delete' || e.key === 'Backspace') return { kind: 'clearRegion' };
     if (e.key === 'Escape') return { kind: 'clearSelection' };
   }
 
-  // --- 4. Arrows with nothing open start the keyboard cursor, but only while
-  // editing: in simulate mode they should do nothing at all.
-  if (arrow && !ctx.hasFloating && !ctx.cursorActive) {
+  // --- 3. Otherwise the arrows nudge the pointer itself, one pixel at a time.
+  // With a button held this feeds the active tool exactly as a mouse move does,
+  // so holding the pencil and tapping an arrow draws one pixel. Edit mode only:
+  // in simulate mode the arrows do nothing at all.
+  if (arrow && !ctx.hasFloating) {
     if (ctx.mode === 'edit' && !typing) {
-      return { kind: 'activateCursor', dx: arrow.dx, dy: arrow.dy };
+      return { kind: 'move', target: 'pointer', dx: arrow.dx, dy: arrow.dy };
     }
     return null;
   }

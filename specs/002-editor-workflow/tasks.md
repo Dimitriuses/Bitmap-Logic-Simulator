@@ -147,17 +147,26 @@ all depend on the shared machinery built in Phase 2.
 
 ## Phase 9: User Story 7 - Place a pixel exactly (Priority: P3)
 
-**Goal**: Arrow keys drive a cursor; an apply key draws with it.
+**Goal**: The arrow keys move the editor's pointer; with a button held they draw.
 
-**Independent Test**: Press an arrow, see a cursor move one pixel, apply, see that pixel change.
+**Independent Test**: Hold the left button with the pencil, press an arrow, and exactly one
+pixel appears in that direction.
 
-- [X] T047 [US7] Add keyboard-cursor state to `src/editor.ts` — position, active flag, activation on first arrow, deactivation on pointer move and Escape (K1 … K4, depends on T006).
-- [X] T048 [US7] Implement auto-repeat with acceleration in `src/ui.ts`, clamped so a held key cannot cross a large bitmap instantly (FR-023, KM-6).
-- [X] T049 [US7] Apply the active tool at the cursor in `src/editor.ts`, through the same path a pointer click uses, so keyboard strokes are indistinguishable in undo (K5, FR-024).
-- [X] T050 [P] [US7] Draw the keyboard cursor in `src/renderer.ts`'s overlay, visibly distinct from the hover outline since its presence is what tells the user Space will paint.
-- [X] T051 [US7] Verify Scenario 7 of `specs/002-editor-workflow/quickstart.md`: one pixel per press, acceleration, apply hits the exact pixel, pointer reclaims control, and Space still pauses when the cursor is inactive (research R4).
+**Platform note**: a web page cannot move the operating system's cursor — no API exists,
+and Pointer Lock only hides it and reports relative motion. The editor therefore keeps its
+own pointer position, and a marker shows where it is whenever it differs from the physical
+cursor.
+
+- [X] T047 [US7] Add `nudgeTo(p)` to `src/editor.ts`: when a stroke is active, feed the point to the tool exactly as a mouse move would (FR-024).
+- [X] T048 [US7] Track the app's pointer and a `nudged` flag in `src/ui.ts`, moving it one pixel per arrow press and clamping to the bitmap (FR-023).
+- [X] T049 [US7] Make the nudged pointer authoritative in `src/ui.ts`: clicks act where the marker is, and any real mouse movement snaps it back and clears the flag (FR-025).
+- [X] T050 [US7] Implement auto-repeat with acceleration in `src/ui.ts`, clamped so a held key cannot cross a large bitmap instantly (KM-6).
+- [X] T051 [P] [US7] Draw the pointer marker in `src/renderer.ts`, shown only while nudged — it is the only indication of where clicks will land (FR-025).
+
+**Checkpoint**: All five stories functional, and Space still means one thing everywhere.
 
 ---
+
 
 ## Phase 10: Polish & Cross-Cutting Concerns
 

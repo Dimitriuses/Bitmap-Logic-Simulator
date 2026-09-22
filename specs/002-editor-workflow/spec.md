@@ -172,24 +172,31 @@ than zooming.
 
 ### User Story 7 - Place a pixel exactly (Priority: P3)
 
-For the pixel that has to go in exactly the right place, the user drives a cursor with the
-arrow keys and applies the tool with a keypress, instead of fighting a mouse at 28× zoom.
+For the pixel that has to go in exactly the right place, the user holds the mouse button
+and steers with the arrow keys, one pixel per press, instead of fighting a mouse at 28x
+zoom.
 
 **Why this priority**: Precision work is where pixel editing gets frustrating, but it is a
 refinement of drawing that already works.
 
-**Independent Test**: Press an arrow key, confirm a cursor appears and moves exactly one
-pixel, then apply the tool and confirm that exact pixel changed.
+**Independent Test**: Hold the left button with the pencil, press an arrow, and confirm
+exactly one pixel is added in that direction.
+
+**Note on the platform**: a web page cannot move the operating system's cursor — there is
+no API for it, and Pointer Lock only hides it and reports relative motion. So the editor
+keeps its own pointer position, which the arrows drive; the physical cursor stays where it
+is, and a marker shows where the app's pointer actually is whenever the two differ.
 
 **Acceptance Scenarios**:
 
-1. **Given** edit mode, **When** the user presses an arrow key, **Then** a keyboard cursor appears and moves exactly one pixel.
-2. **Given** the keyboard cursor, **When** an arrow key is held, **Then** it repeats, and moves faster the longer it is held.
-3. **Given** the keyboard cursor, **When** the user presses the apply key, **Then** the active tool acts on exactly the pixel under the cursor.
-4. **Given** the keyboard cursor is active, **When** the user moves the mouse over the canvas, **Then** the keyboard cursor gives way and pointer drawing resumes.
-5. **Given** the keyboard cursor is not active, **When** the user presses Space, **Then** it pauses and resumes the simulation as it always has.
+1. **Given** edit mode with a button held, **When** the user presses an arrow key, **Then** the active tool acts on the adjacent pixel, exactly as if the mouse had moved one pixel.
+2. **Given** a held arrow key, **When** it repeats, **Then** the pointer keeps moving, and faster the longer it is held.
+3. **Given** the arrows have moved the pointer, **When** the user clicks, **Then** the click acts where the marker is, not where the physical cursor sits.
+4. **Given** the arrows have moved the pointer, **When** the user moves the real mouse, **Then** the pointer snaps back to it and the marker disappears.
+5. **Given** any state at all, **When** the user presses Space, **Then** it pauses or resumes the simulation — there is no apply key, so Space is never overloaded.
 
 ---
+
 
 ### Edge Cases
 
@@ -248,11 +255,12 @@ pixel, then apply the tool and confirm that exact pixel changed.
 - **FR-021**: Two wheel schemes MUST be offered: the existing zoom-at-cursor, and pan-Y / Shift pan-X / Ctrl zoom-at-cursor.
 - **FR-022**: The choice MUST persist, and neither scheme may let the browser's page zoom fire.
 
-**Keyboard cursor (US7)**
+**Pointer nudging (US7)**
 
-- **FR-023**: Arrow keys MUST move a keyboard cursor one pixel per press, with auto-repeat and acceleration while held.
-- **FR-024**: An apply key MUST act with the current tool on exactly the pixel under the keyboard cursor.
-- **FR-025**: The keyboard cursor MUST yield to the pointer when the pointer is used, and MUST NOT change what Space does when it is not active.
+- **FR-023**: Arrow keys MUST move the editor's pointer one pixel per press, with auto-repeat and acceleration while held.
+- **FR-024**: While a pointer button is held, a nudge MUST feed the active tool exactly as a mouse move does, so holding the pencil and tapping an arrow draws one pixel.
+- **FR-025**: Once nudged, the editor's pointer MUST be what clicks act on, and MUST be shown; it MUST snap back to the physical cursor as soon as the real mouse moves.
+- **FR-029**: Space MUST pause and resume in every state. This feature MUST NOT introduce an apply key.
 
 **Across the feature**
 
@@ -267,7 +275,7 @@ pixel, then apply the tool and confirm that exact pixel changed.
 - **FloatingPaste**: A PixelBlock positioned over the document, not yet written, awaiting confirmation.
 - **Palette**: The ordered list of usable wire colours, defaults plus custom.
 - **ToolParameter**: A value a tool exposes for wheel adjustment — the active colour, the bus width.
-- **KeyboardCursor**: A pixel position driven by the arrow keys, active or not.
+- **Pointer**: The editor's own pointer position, in bitmap pixels, driven by the mouse and by the arrow keys. A browser cannot move the physical cursor, so this is the only pointer the editor has.
 - **CameraScheme**: Which wheel behaviour is in effect.
 
 ## Success Criteria *(mandatory)*
@@ -282,7 +290,8 @@ pixel, then apply the tool and confirm that exact pixel changed.
 - **SC-006**: A cancelled paste leaves the document bit-identical to before the paste began.
 - **SC-007**: A committed paste costs exactly one recompile and one undo step.
 - **SC-008**: All 16 default palette colours, and any colour the palette accepts, satisfy the engine's wire test.
-- **SC-009**: Every key with more than one possible meaning resolves per the documented precedence, demonstrated for Enter, Escape and the arrow keys with a floating paste present and absent.
+- **SC-009**: Every key with more than one possible meaning resolves per the documented precedence, demonstrated for Enter, Escape and the arrow keys with a floating paste present and absent. Space resolves to pause in every state.
+- **SC-011**: With a button held, one arrow press changes exactly one pixel.
 - **SC-010**: All 22 bundled schematics still compile to their recorded wire and gate counts.
 
 ## Assumptions
