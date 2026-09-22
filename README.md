@@ -55,6 +55,10 @@ scripts/            build helpers
 | [`src/document.ts`](src/document.ts) | The editable circuit. Owns the source pixels and undo history; a `Circuit` is compiled *from* it. |
 | [`src/editor.ts`](src/editor.ts) + [`src/tools/`](src/tools) | Drawing mode, the six tools, and pointer routing. |
 | [`src/stamps.ts`](src/stamps.ts) | The five 3×3 gate/crossover patterns, transcribed from the engine. |
+| [`src/geometry.ts`](src/geometry.ts) | Connected rasterisation and bus spacing — what makes drawn wires conduct. |
+| [`src/block.ts`](src/block.ts) + [`src/clipboard.ts`](src/clipboard.ts) | Selection, the clipboard and the floating paste. |
+| [`src/keymap.ts`](src/keymap.ts) | The one place a key decides what it means. |
+| [`src/palette.ts`](src/palette.ts) | The 16 default colours and any custom ones. |
 | [`src/png.ts`](src/png.ts) | Encoding a circuit back to a PNG, and saving it. |
 | [`src/ui.ts`](src/ui.ts) | Controls, input handling, frame loop. |
 | [`src/main.ts`](src/main.ts) | Entry point; the only module `index.html` loads. |
@@ -109,6 +113,10 @@ circuits would deadlock.
 | <kbd>E</kbd> | Toggle edit mode |
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Undo / redo an edit |
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save the circuit |
+| <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd> | Copy, cut, paste a selection |
+| <kbd>Delete</kbd> | Clear the selected region |
+| Arrows | Move a floating paste, or the drawing cursor |
+| <kbd>Enter</kbd> / <kbd>Escape</kbd> | Confirm or cancel a paste |
 | <kbd>+</kbd> <kbd>−</kbd> | Zoom |
 | Mouse wheel | Zoom at the cursor |
 | Middle drag | Pan |
@@ -134,21 +142,61 @@ keyboard shortcut — behaves exactly as it does in simulate mode.
 
 | Tool | |
 | --- | --- |
-| ✏️ Pencil | Paint wire in the active colour |
-| ╱ Line | A straight run, committed on release |
+| ✏️ Pencil | Paint wire in the active colour. **Right-drag erases.** |
+| ╱ Line | A straight run, or a bus — scroll over the tool to set the conductor count |
 | ◻ Eraser | Paint insulation |
 | ⌖ Picker | Adopt an existing wire's colour |
 | ▷ Gate | Stamp an inverter — pick the direction with the arrows |
 | ✛ Crossover | Stamp wires that cross without connecting |
+| ⬚ Select | Drag a rectangle, then copy, cut, delete or paste it |
 
 The gate stamp is the reason this is easier than a paint program: it writes the
 exact corner pattern the engine looks for. Drawing a `+` by hand and filling the
 wrong two corners produces no error — just a pattern that is silently ignored.
 
-Edits go straight into the running circuit. Finish a stroke and the circuit is
-recompiled on the spot, keeping the state of every wire that still exists, so
-you can rewire something while it runs and watch it react. A pixel grid and a
-cursor outline appear once you are zoomed in far enough for them to help.
+Entering edit mode pauses the simulation, so nothing changes underneath you
+while you draw, and leaving restores whatever the run state was before. Press
+<kbd>Space</kbd> while editing and it runs anyway: a stroke is recompiled the
+moment it ends and wire states carry across, so you can rewire a live circuit
+and watch it react if that is what you want.
+
+Nothing in edit mode drives or toggles a wire — both buttons belong to the
+tools. A pixel grid and a cursor outline appear once you are zoomed in far
+enough for them to help.
+
+Wires drawn at any angle are properly connected. The engine joins pixels only
+on their four cardinal sides, so the tools lay down a staircase rather than a
+diagonal run; a line that merely *looked* continuous would not conduct.
+
+### Palette
+
+Sixteen colours, plus any you add. Scroll the wheel over the colour swatch to
+cycle through them without opening anything. A colour the engine would read as
+insulation is refused rather than quietly brightened.
+
+### Buses
+
+Set the line tool's width and one drag lays down that many parallel conductors,
+spaced so they stay separate nets — including diagonally, where the spacing has
+to be wider than you would guess.
+
+### Selection and clipboard
+
+Drag a rectangle with the select tool, then <kbd>Ctrl</kbd>+<kbd>C</kbd>,
+<kbd>Ctrl</kbd>+<kbd>X</kbd> or <kbd>Delete</kbd>. <kbd>Ctrl</kbd>+<kbd>V</kbd>
+brings it back as a floating block you can drag, nudge with the arrow keys and
+turn with the rotate buttons. Nothing is written until <kbd>Enter</kbd>;
+<kbd>Escape</kbd> throws it away and leaves the circuit untouched.
+
+Rotation handles gates with no special cases: a gate's direction is encoded in
+which corners are wire, and those corners turn with the pixels.
+
+### Drawing without the mouse
+
+Press an arrow key and a cursor appears, moving exactly one pixel per press and
+accelerating if you hold it. While that cursor is visible, <kbd>Space</kbd>
+applies the current tool at it; while it is not, <kbd>Space</kbd> pauses as it
+always has. Move the mouse and the cursor steps aside.
 
 <kbd>Ctrl</kbd>+<kbd>Z</kbd> and <kbd>Ctrl</kbd>+<kbd>Y</kbd> undo and redo, one
 stroke at a time.
@@ -172,6 +220,8 @@ the circuit is the same.
 
 ## Settings
 
+- **Mouse wheel** — zoom at the cursor, or the Paint.NET arrangement: scroll to
+  pan, <kbd>Shift</kbd> to pan sideways, <kbd>Ctrl</kbd> to zoom.
 - **Speed** — simulation ticks per second (1–120).
 - **Passes per tick** — cycles run per tick (1–100). Raise this to fast-forward
   a slow circuit; the display still refreshes once per frame.

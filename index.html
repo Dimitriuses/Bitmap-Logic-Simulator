@@ -37,12 +37,13 @@
       <div id="stage">
         <div id="toolbar" hidden aria-label="Drawing tools">
           <div class="tool-group" role="radiogroup" aria-label="Tool">
-            <button class="tool" data-tool="pencil" type="button" title="Pencil">✏️</button>
-            <button class="tool" data-tool="line" type="button" title="Line">╱</button>
+            <button class="tool" data-tool="pencil" type="button" title="Pencil — right-drag erases">✏️</button>
+            <button id="tool-line" class="tool" data-tool="line" type="button" title="Line / bus — scroll to set width">╱</button>
             <button class="tool" data-tool="eraser" type="button" title="Eraser">◻</button>
             <button class="tool" data-tool="picker" type="button" title="Pick colour">⌖</button>
             <button class="tool" data-tool="gate" type="button" title="Gate">▷</button>
             <button class="tool" data-tool="crossover" type="button" title="Crossover">✛</button>
+            <button class="tool" data-tool="select" type="button" title="Select — Ctrl+C/X, Del, Ctrl+V">⬚</button>
           </div>
 
           <div class="tool-group" role="radiogroup" aria-label="Gate direction">
@@ -53,7 +54,20 @@
           </div>
 
           <div class="tool-group">
-            <input id="wire-color" type="color" value="#ffffff" aria-label="Wire colour" />
+            <label id="bus-field" title="Conductors drawn by the line tool">
+              bus <input id="bus-width" type="number" min="1" max="16" step="1" value="1" aria-label="Bus width" />
+            </label>
+          </div>
+
+          <div class="tool-group">
+            <button id="wire-color" type="button" title="Wire colour — scroll to cycle" aria-haspopup="true" aria-expanded="false">
+              <span id="wire-swatch"></span>
+            </button>
+          </div>
+
+          <div class="tool-group">
+            <button id="rotate-ccw" type="button" title="Rotate paste −90°" disabled>⟲</button>
+            <button id="rotate-cw" type="button" title="Rotate paste 90°" disabled>⟳</button>
           </div>
 
           <div class="tool-group">
@@ -63,6 +77,14 @@
 
           <div class="tool-group">
             <button id="save" class="primary" type="button" title="Save (Ctrl+S)">Save</button>
+          </div>
+        </div>
+
+        <div id="palette" hidden aria-label="Palette">
+          <div id="palette-grid"></div>
+          <div class="palette-add">
+            <input id="palette-input" type="color" value="#ffffff" aria-label="New colour" />
+            <button id="palette-add" type="button">Add</button>
           </div>
         </div>
 
@@ -107,6 +129,13 @@
             <div class="row">
               <button id="fit" type="button">Fit to window</button>
             </div>
+            <div class="field">
+              <label for="camera">Mouse wheel</label>
+              <select id="camera">
+                <option value="classic">Zoom at cursor</option>
+                <option value="paint">Scroll · Shift ↔ · Ctrl zoom</option>
+              </select>
+            </div>
             <p class="hint">Zoom <b id="zoom-value">100%</b></p>
           </div>
 
@@ -128,6 +157,12 @@
                 <dd>Undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo</dd>
                 <dt><kbd>Ctrl</kbd>+<kbd>S</kbd></dt>
                 <dd>Save the circuit</dd>
+                <dt><kbd>Ctrl</kbd>+<kbd>C</kbd> <kbd>X</kbd> <kbd>V</kbd></dt>
+                <dd>Copy · cut · paste a selection</dd>
+                <dt>Arrows</dt>
+                <dd>Move the paste, or the drawing cursor</dd>
+                <dt><kbd>Enter</kbd> <kbd>Esc</kbd></dt>
+                <dd>Confirm · cancel a paste</dd>
                 <dt><kbd>+</kbd> <kbd>−</kbd></dt>
                 <dd>Zoom</dd>
                 <dt>Wheel</dt>

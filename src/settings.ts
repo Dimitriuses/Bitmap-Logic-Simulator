@@ -69,18 +69,32 @@ import { isWireColor, WIRE_WHITE, type Rgba } from './colors.js';
 import type { EditorMode } from './editor.js';
 import type { GateDirection } from './stamps.js';
 import type { ToolId } from './tools/types.js';
+import { CAMERA_SCHEMES, type CameraScheme } from './viewport-camera.js';
 
 export interface EditorPrefs {
   mode: EditorMode;
   tool: ToolId;
   color: Rgba;
   direction: GateDirection;
+  /** Custom palette entries, in the order they were added. */
+  customColors: Rgba[];
+  activeColorIndex: number;
+  busWidth: number;
+  cameraScheme: CameraScheme;
 }
 
 const EDITOR_KEY = 'bmplogicsim.editor';
 
 const MODES: readonly EditorMode[] = ['simulate', 'edit'];
-const TOOLS: readonly ToolId[] = ['pencil', 'line', 'eraser', 'picker', 'gate', 'crossover'];
+const TOOLS: readonly ToolId[] = [
+  'pencil',
+  'line',
+  'eraser',
+  'picker',
+  'gate',
+  'crossover',
+  'select',
+];
 const DIRECTIONS: readonly GateDirection[] = ['up', 'down', 'left', 'right'];
 
 export const EDITOR_DEFAULTS: EditorPrefs = {
@@ -90,6 +104,10 @@ export const EDITOR_DEFAULTS: EditorPrefs = {
   tool: 'pencil',
   color: WIRE_WHITE,
   direction: 'right',
+  customColors: [],
+  activeColorIndex: 0,
+  busWidth: 1,
+  cameraScheme: 'classic',
 };
 
 function oneOf<T extends string>(value: unknown, allowed: readonly T[]): T | null {
@@ -121,6 +139,25 @@ export function readEditorPrefs(): EditorPrefs {
   // restored — it would leave the user drawing wire that does not conduct.
   if (typeof s.color === 'number' && Number.isFinite(s.color) && isWireColor(s.color >>> 0)) {
     prefs.color = s.color >>> 0;
+  }
+
+  const scheme = oneOf(s.cameraScheme, CAMERA_SCHEMES);
+  if (scheme) prefs.cameraScheme = scheme;
+
+  if (typeof s.busWidth === 'number' && Number.isFinite(s.busWidth)) {
+    prefs.busWidth = Math.min(16, Math.max(1, Math.round(s.busWidth)));
+  }
+
+  // A stored colour the engine would read as insulation is dropped rather than
+  // restored: it would leave the user drawing wire that does not conduct.
+  if (Array.isArray(s.customColors)) {
+    prefs.customColors = s.customColors
+      .filter((c): c is number => typeof c === 'number' && Number.isFinite(c))
+      .map((c) => c >>> 0)
+      .filter(isWireColor);
+  }
+  if (typeof s.activeColorIndex === 'number' && Number.isFinite(s.activeColorIndex)) {
+    prefs.activeColorIndex = Math.max(0, Math.round(s.activeColorIndex));
   }
   return prefs;
 }

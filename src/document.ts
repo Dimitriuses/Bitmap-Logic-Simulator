@@ -9,7 +9,9 @@
 // Nothing compiled ever writes back. That is what keeps simulator.ts frozen and
 // its fidelity to UMain.pas reviewable.
 
-import { alphaOf, blueOf, greenOf, redOf, type Rgba, rgba } from './colors.js';
+import { PixelBlock, type Rect } from './block.js';
+import { alphaOf, blueOf, greenOf, INSULATION, redOf, type Rgba, rgba } from './colors.js';
+import { walkConnected } from './geometry.js';
 import { EditHistory, type Edit } from './history.js';
 import { Circuit, type PrevRender } from './simulator.js';
 
@@ -125,33 +127,51 @@ export class CircuitDocument {
   }
 
   /**
-   * Bresenham between two points, inclusive. Pointer events arrive far slower
-   * than the pointer moves, so without this a quick drag leaves a dotted trail —
-   * which does not conduct, and reads as an engine fault rather than a UI one.
+   * A connected run between two points, inclusive.
+   *
+   * Pointer events arrive far slower than the pointer moves, so without this a
+   * quick drag leaves a dotted trail. It must be *4-connected*, not merely
+   * continuous-looking: the engine joins wire pixels only on the four cardinal
+   * sides, so a diagonal step leaves a gap and the run stops being a conductor.
    */
   line(x0: number, y0: number, x1: number, y1: number, color: Rgba): void {
     this.#requireStroke();
-    let x = Math.round(x0);
-    let y = Math.round(y0);
-    const tx = Math.round(x1);
-    const ty = Math.round(y1);
-    const dx = Math.abs(tx - x);
-    const dy = -Math.abs(ty - y);
-    const sx = x < tx ? 1 : -1;
-    const sy = y < ty ? 1 : -1;
-    let err = dx + dy;
+    walkConnected(x0, y0, x1, y1, (x, y) => this.set(x, y, color));
+  }
 
-    for (;;) {
-      this.set(x, y, color);
-      if (x === tx && y === ty) break;
-      const e2 = 2 * err;
-      if (e2 >= dy) {
-        err += dy;
-        x += sx;
+  // ---------------------------------------------------------------------
+  // Block operations — selection, clipboard and paste
+  // ---------------------------------------------------------------------
+
+  /** Copy a rectangle out. Reads only: no stroke, no dirty flag. */
+  readBlock(rect: Rect): PixelBlock {
+    const pixels = new Uint32Array(rect.width * rect.height);
+    for (let dy = 0; dy < rect.height; dy++) {
+      for (let dx = 0; dx < rect.width; dx++) {
+        pixels[dy * rect.width + dx] = this.get(rect.x + dx, rect.y + dy);
       }
-      if (e2 <= dx) {
-        err += dx;
-        y += sy;
+    }
+    return new PixelBlock(rect.width, rect.height, pixels);
+  }
+
+  /**
+   * Write a block at (x, y), inside the current stroke.
+   *
+   * The whole rectangle is written, insulation included — a transparent paste
+   * would leave fragments of whatever was underneath showing through a
+   * cut-and-paste. Out-of-bounds pixels are dropped by `set`.
+   */
+  writeBlock(block: PixelBlock, x: number, y: number): void {
+    this.#requireStroke();
+    block.forEach((dx, dy, color) => this.set(x + dx, y + dy, color));
+  }
+
+  /** Fill a rectangle with insulation, inside the current stroke. */
+  clearRect(rect: Rect): void {
+    this.#requireStroke();
+    for (let dy = 0; dy < rect.height; dy++) {
+      for (let dx = 0; dx < rect.width; dx++) {
+        this.set(rect.x + dx, rect.y + dy, INSULATION);
       }
     }
   }

@@ -12,7 +12,7 @@
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "serve": "python -m http.server 8000",
     "start": "npm run build && npm run serve",
-    "verify": "node scripts/verify/counts.mjs && node scripts/verify/stamps.mjs",
+    "verify": "node scripts/verify/counts.mjs && node scripts/verify/stamps.mjs && node scripts/verify/geometry.mjs && node scripts/verify/rotate.mjs && node scripts/verify/keymap.mjs",
     "verify:baseline": "node scripts/verify/counts.mjs --save"
   },
   "devDependencies": {

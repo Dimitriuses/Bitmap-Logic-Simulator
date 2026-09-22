@@ -1,48 +1,96 @@
-// editor.ts — mode, active tool, and pointer routing.
+// editor.ts — mode, tools, selection, paste and the keyboard cursor.
 //
-// The left mouse button cannot both paint a pixel and pulse a wire, and guessing
-// which the user meant would make the most common action unpredictable. So there
-// is an explicit mode. In Simulate mode every handler here returns false and the
-// existing, already-verified interaction runs untouched; only in Edit mode does
-// the left button draw.
-//
-// Mode governs the left button and nothing else: pan, zoom, right-click and
-// every keyboard shortcut behave identically either way.
+// The left mouse button cannot both paint a pixel and pulse a wire, so there is
+// an explicit mode. In Simulate mode every handler here returns false and the
+// existing, already-verified interaction runs untouched. In Edit mode the editor
+// owns *both* buttons: the left draws, the right erases, and nothing pokes wire
+// state at all.
 
-import { isWireColor, WIRE_WHITE, type Rgba } from './colors.js';
+import { normaliseRect, type Rect } from './block.js';
+import { EditorClipboard, type Floating } from './clipboard.js';
+import { isWireColor, type Rgba } from './colors.js';
 import type { CircuitDocument } from './document.js';
+import { Palette } from './palette.js';
 import type { GateDirection } from './stamps.js';
 import { eraser } from './tools/eraser.js';
 import { line } from './tools/line.js';
 import { pencil } from './tools/pencil.js';
 import { picker } from './tools/picker.js';
+import { select } from './tools/select.js';
 import { crossoverStamp, gateStamp } from './tools/stamp.js';
-import { NO_PREVIEW, type PixelPoint, type Tool, type ToolContext, type ToolId } from './tools/types.js';
+import {
+  NO_PREVIEW,
+  type Button,
+  type PixelPoint,
+  type Tool,
+  type ToolContext,
+  type ToolId,
+} from './tools/types.js';
 
 export type EditorMode = 'simulate' | 'edit';
 
-function buildTools(): Map<ToolId, Tool> {
-  const all = [pencil(), line(), eraser(), picker(), gateStamp(), crossoverStamp()];
-  return new Map(all.map((t) => [t.id, t]));
+export const MIN_BUS = 1;
+export const MAX_BUS = 16;
+
+/** A toolbar control that the wheel can adjust. */
+export interface ToolParameter {
+  readonly id: string;
+  step(delta: number): void;
+  describe(): string;
 }
 
 export class Editor {
   mode: EditorMode = 'simulate';
   direction: GateDirection = 'right';
+  busWidth = 1;
 
-  readonly #tools = buildTools();
+  readonly palette: Palette;
+  readonly clipboard = new EditorClipboard();
+
+  readonly #tools: Map<ToolId, Tool>;
   #toolId: ToolId = 'pencil';
-  #color: Rgba = WIRE_WHITE;
   #doc: CircuitDocument | null = null;
-  /** The tool currently mid-stroke, if any. */
+
+  /** The tool currently mid-stroke, and which button started it. */
   #active: Tool | null = null;
+  #activeButton: Button = 'primary';
   #pointerId: number | null = null;
 
+  /** Pointer offset within a floating block while it is being dragged. */
+  #grabOffset: { dx: number; dy: number } | null = null;
+
+  /** Keyboard cursor. Visible exactly while active — see keymap.ts. */
+  cursor: PixelPoint = { x: 0, y: 0 };
+  cursorActive = false;
+
   /**
-   * @param onCommit called after a stroke that changed pixels, so the host can
-   *   recompile exactly once per stroke.
+   * @param onCommit called after anything that changed pixels, so the host can
+   *   recompile exactly once per completed action.
    */
-  constructor(private readonly onCommit: () => void) {}
+  constructor(
+    private readonly onCommit: () => void,
+    palette: Palette = new Palette()
+  ) {
+    this.palette = palette;
+    this.#tools = new Map(
+      [
+        pencil(),
+        line(),
+        eraser(),
+        picker(),
+        gateStamp(),
+        crossoverStamp(),
+        select({
+          setSelection: (rect) => this.clipboard.setSelection(rect),
+          grabFloating: (p) => this.#grabFloating(p),
+          dragFloating: (p) => this.#dragFloating(p),
+          dropFloating: () => {
+            this.#grabOffset = null;
+          },
+        }),
+      ].map((t) => [t.id, t])
+    );
+  }
 
   get tool(): ToolId {
     return this.#toolId;
@@ -53,17 +101,29 @@ export class Editor {
   }
 
   get color(): Rgba {
-    return this.#color;
+    return this.palette.active;
   }
 
   get drawing(): boolean {
     return this.#active !== null;
   }
 
+  get selection(): Rect | null {
+    return this.clipboard.selection;
+  }
+
+  get floating(): Floating | null {
+    return this.clipboard.floating;
+  }
+
   setDocument(doc: CircuitDocument | null): void {
     this.#active = null;
     this.#pointerId = null;
+    this.#grabOffset = null;
+    this.cursorActive = false;
+    this.clipboard.resetForDocument();
     this.#doc = doc;
+    if (doc) this.cursor = { x: doc.width >> 1, y: doc.height >> 1 };
   }
 
   /**
@@ -72,22 +132,156 @@ export class Editor {
    * discover why.
    */
   setColor(color: Rgba): boolean {
-    if (!isWireColor(color)) return false;
-    this.#color = color;
-    return true;
+    return this.palette.add(color);
   }
 
-  #context(): ToolContext | null {
+  setBusWidth(n: number): void {
+    this.busWidth = Math.min(MAX_BUS, Math.max(MIN_BUS, Math.round(n)));
+  }
+
+  /** The wheel-adjustable parameters, by the control that owns each. */
+  parameters(): ToolParameter[] {
+    return [
+      {
+        id: 'wire-color',
+        step: (d) => this.palette.cycle(d),
+        describe: () => `colour ${this.palette.activeIndex + 1}/${this.palette.colors.length}`,
+      },
+      {
+        id: 'tool-line',
+        step: (d) => this.setBusWidth(this.busWidth + Math.sign(d)),
+        describe: () => (this.busWidth > 1 ? `bus of ${this.busWidth}` : 'single line'),
+      },
+    ];
+  }
+
+  #context(button: Button = 'primary'): ToolContext | null {
     const doc = this.#doc;
     if (!doc) return null;
     return {
       doc,
-      color: this.#color,
+      color: this.palette.active,
       direction: this.direction,
+      button,
+      busWidth: this.busWidth,
       setColor: (c) => {
-        this.#color = c;
+        if (isWireColor(c)) this.palette.add(c);
       },
     };
+  }
+
+  // ---------------------------------------------------------------------
+  // Floating paste
+  // ---------------------------------------------------------------------
+
+  #grabFloating(p: PixelPoint): boolean {
+    const f = this.clipboard.floating;
+    if (!f) return false;
+    const inside =
+      p.x >= f.x && p.y >= f.y && p.x < f.x + f.block.width && p.y < f.y + f.block.height;
+    if (!inside) return false;
+    this.#grabOffset = { dx: p.x - f.x, dy: p.y - f.y };
+    return true;
+  }
+
+  #dragFloating(p: PixelPoint): void {
+    const g = this.#grabOffset;
+    if (!g) return;
+    this.clipboard.placeFloating(p.x - g.dx, p.y - g.dy);
+  }
+
+  // ---------------------------------------------------------------------
+  // Clipboard actions, driven by resolveKey
+  // ---------------------------------------------------------------------
+
+  copy(): boolean {
+    const doc = this.#doc;
+    return doc ? this.clipboard.copy(doc) : false;
+  }
+
+  cut(): boolean {
+    const doc = this.#doc;
+    if (!doc || !this.clipboard.cut(doc)) return false;
+    this.onCommit();
+    return true;
+  }
+
+  clearRegion(): boolean {
+    const doc = this.#doc;
+    if (!doc || !this.clipboard.erase(doc)) return false;
+    this.onCommit();
+    return true;
+  }
+
+  /** Paste centred on the given bitmap point — usually the middle of the view. */
+  paste(centreX: number, centreY: number): boolean {
+    if (!this.clipboard.hasContent) return false;
+    // Selecting the tool makes the block draggable straight away.
+    if (this.clipboard.beginPaste(centreX, centreY)) {
+      this.#toolId = 'select';
+      return true;
+    }
+    return false;
+  }
+
+  commitPaste(): boolean {
+    const doc = this.#doc;
+    if (!doc) return false;
+    const wrote = this.clipboard.commit(doc);
+    if (wrote) this.onCommit();
+    return wrote;
+  }
+
+  cancelPaste(): void {
+    this.clipboard.cancel();
+    this.#grabOffset = null;
+  }
+
+  rotatePaste(direction: 'cw' | 'ccw'): void {
+    this.clipboard.rotateFloating(direction);
+  }
+
+  moveFloating(dx: number, dy: number): void {
+    this.clipboard.moveFloating(dx, dy);
+  }
+
+  // ---------------------------------------------------------------------
+  // Keyboard cursor
+  // ---------------------------------------------------------------------
+
+  activateCursor(dx: number, dy: number): void {
+    this.cursorActive = true;
+    this.moveCursor(dx, dy);
+  }
+
+  moveCursor(dx: number, dy: number): void {
+    const doc = this.#doc;
+    if (!doc) return;
+    this.cursor = {
+      x: Math.min(doc.width - 1, Math.max(0, this.cursor.x + dx)),
+      y: Math.min(doc.height - 1, Math.max(0, this.cursor.y + dy)),
+    };
+  }
+
+  deactivateCursor(): void {
+    this.cursorActive = false;
+  }
+
+  /**
+   * Apply the current tool at the keyboard cursor, through the same
+   * down/up path a pointer click uses — so a keyboard-drawn pixel is
+   * indistinguishable from a mouse-drawn one, including in undo.
+   */
+  applyAtCursor(): boolean {
+    const ctx = this.#context('primary');
+    const tool = this.#tools.get(this.#toolId);
+    if (!ctx || !tool || !tool.mutates) return false;
+    ctx.doc.beginStroke(tool.label(ctx));
+    tool.down(this.cursor, ctx);
+    tool.up(this.cursor, ctx);
+    const edit = ctx.doc.endStroke();
+    if (edit) this.onCommit();
+    return edit !== null;
   }
 
   // ---------------------------------------------------------------------
@@ -95,15 +289,24 @@ export class Editor {
   // ---------------------------------------------------------------------
 
   handlePointerDown(e: PointerEvent, p: PixelPoint): boolean {
-    if (this.mode !== 'edit' || e.button !== 0) return false;
-    const ctx = this.#context();
+    if (this.mode !== 'edit') return false;
+    if (e.button !== 0 && e.button !== 2) return false;
+
+    const button: Button = e.button === 2 ? 'secondary' : 'primary';
     const tool = this.#tools.get(this.#toolId);
+    const ctx = this.#context(button);
     if (!ctx || !tool) return false;
 
+    // A tool that does nothing with the right button consumes it anyway: in
+    // edit mode the right button must never fall through to wire toggling.
+    if (button === 'secondary' && !tool.usesSecondary) return true;
+
+    // The pointer takes over from the keyboard cursor.
+    this.cursorActive = false;
+
     this.#active = tool;
+    this.#activeButton = button;
     this.#pointerId = e.pointerId;
-    // The editor frames the stroke, not the tool, so every tool yields exactly
-    // one Edit and one recompile.
     if (tool.mutates) ctx.doc.beginStroke(tool.label(ctx));
     tool.down(p, ctx);
     return true;
@@ -111,7 +314,7 @@ export class Editor {
 
   handlePointerMove(e: PointerEvent, p: PixelPoint): boolean {
     if (!this.#active || e.pointerId !== this.#pointerId) return false;
-    const ctx = this.#context();
+    const ctx = this.#context(this.#activeButton);
     if (!ctx) return false;
     this.#active.move(p, ctx);
     return true;
@@ -119,7 +322,7 @@ export class Editor {
 
   handlePointerUp(e: PointerEvent, p: PixelPoint): boolean {
     if (!this.#active || e.pointerId !== this.#pointerId) return false;
-    const ctx = this.#context();
+    const ctx = this.#context(this.#activeButton);
     const tool = this.#active;
     this.#active = null;
     this.#pointerId = null;
@@ -135,7 +338,7 @@ export class Editor {
   }
 
   /** Abandon an in-progress stroke, e.g. on pointercancel. */
-  cancel(): void {
+  cancelStroke(): void {
     if (!this.#active) return;
     this.#active = null;
     this.#pointerId = null;
@@ -152,5 +355,12 @@ export class Editor {
     const tool = this.#tools.get(this.#toolId);
     if (!ctx || !tool) return NO_PREVIEW;
     return tool.preview(p, ctx);
+  }
+
+  /** Used by the select tool's host callbacks; exposed for the UI's hit tests. */
+  rectFrom(ax: number, ay: number, bx: number, by: number): Rect | null {
+    const doc = this.#doc;
+    if (!doc) return null;
+    return normaliseRect(ax, ay, bx, by, doc.width, doc.height);
   }
 }

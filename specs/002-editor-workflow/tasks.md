@@ -27,8 +27,8 @@ all depend on the shared machinery built in Phase 2.
 
 ## Phase 1: Setup
 
-- [ ] T001 [P] Extend `scripts/verify/harness.mjs` with a `netCount(image)` helper and a `samePixels(a, b)` comparison, so geometry checks read as assertions rather than boilerplate.
-- [ ] T002 [P] Add `scripts/verify/keymap.mjs` scaffolding that imports `dist/keymap.js` and enumerates the state space from [contracts/input.md](./contracts/input.md).
+- [X] T001 [P] Extend `scripts/verify/harness.mjs` with a `netCount(image)` helper and a `samePixels(a, b)` comparison, so geometry checks read as assertions rather than boilerplate.
+- [X] T002 [P] Add `scripts/verify/keymap.mjs` scaffolding that imports `dist/keymap.js` and enumerates the state space from [contracts/input.md](./contracts/input.md).
 
 ---
 
@@ -38,14 +38,14 @@ all depend on the shared machinery built in Phase 2.
 
 **⚠️ CRITICAL**: US3–US7 are blocked until this is complete. US1 and US2 are not.
 
-- [ ] T003 [P] Create `src/geometry.ts` with `walkConnected()` — one axis per iteration, inclusive endpoints, no per-pixel allocation (G-1 … G-6).
-- [ ] T004 [P] Add `busOffsets()` to `src/geometry.ts`: pitch 2 axis-aligned, 3 otherwise, perpendicular to the dominant axis, first offset always zero (G-7 … G-10).
-- [ ] T005 [P] Create `src/block.ts` with `PixelBlock`, `fromRect`, `rotateCW`/`rotateCCW` and `forEach` — pixel transform only, no gate awareness (BL-1 … BL-4).
-- [ ] T006 [P] Create `src/keymap.ts` with `resolveKey()` as a pure function implementing the precedence table exactly (KM-1 … KM-6).
-- [ ] T007 [P] Create `src/palette.ts` with the 16 defaults, `cycle`, `add`, `remove`, and a module-load assertion that every default passes `isWireColor` (PL-1 … PL-5).
-- [ ] T008 Add the `ToolParameter` type and wheel-parameter plumbing to `src/editor.ts`, with `{ passive: false }` registration so a notch can be consumed (T1 … T3, WH-1 … WH-4).
-- [ ] T009 Stop toolbar controls from stealing keyboard focus in `src/ui.ts`: `preventDefault()` on `mousedown` for every `#toolbar` control, leaving Tab access intact (FR-028, KM-7). Without this, Enter never reaches the paste-commit handler.
-- [ ] T010 Verify Scenario 1's pure half and Scenario 8 headlessly via `scripts/verify/geometry.mjs` and `scripts/verify/keymap.mjs`: connectivity, axis-aligned equivalence, bus widths 1–16 × 5 slopes, and the full precedence table (depends on T003–T007).
+- [X] T003 [P] Create `src/geometry.ts` with `walkConnected()` — one axis per iteration, inclusive endpoints, no per-pixel allocation (G-1 … G-6).
+- [X] T004 [P] Add `busOffsets()` to `src/geometry.ts`: pitch 2 axis-aligned, 3 otherwise, perpendicular to the dominant axis, first offset always zero (G-7 … G-10).
+- [X] T005 [P] Create `src/block.ts` with `PixelBlock`, `fromRect`, `rotateCW`/`rotateCCW` and `forEach` — pixel transform only, no gate awareness (BL-1 … BL-4).
+- [X] T006 [P] Create `src/keymap.ts` with `resolveKey()` as a pure function implementing the precedence table exactly (KM-1 … KM-6).
+- [X] T007 [P] Create `src/palette.ts` with the 16 defaults, `cycle`, `add`, `remove`, and a module-load assertion that every default passes `isWireColor` (PL-1 … PL-5).
+- [X] T008 Add the `ToolParameter` type and wheel-parameter plumbing to `src/editor.ts`, with `{ passive: false }` registration so a notch can be consumed (T1 … T3, WH-1 … WH-4).
+- [X] T009 Stop toolbar controls from stealing keyboard focus in `src/ui.ts`: `preventDefault()` on `mousedown` for every `#toolbar` control, leaving Tab access intact (FR-028, KM-7). Without this, Enter never reaches the paste-commit handler.
+- [X] T010 Verify Scenario 1's pure half and Scenario 8 headlessly via `scripts/verify/geometry.mjs` and `scripts/verify/keymap.mjs`: connectivity, axis-aligned equivalence, bus widths 1–16 × 5 slopes, and the full precedence table (depends on T003–T007).
 
 **Checkpoint**: shared machinery exists and is proven in isolation.
 
@@ -57,11 +57,11 @@ all depend on the shared machinery built in Phase 2.
 
 **Independent Test**: Draw a 45° line; the wire count rises by exactly one.
 
-- [ ] T011 [US1] Route `CircuitDocument.line()` in `src/document.ts` through `walkConnected` from `src/geometry.ts`, replacing the Bresenham loop (FR-001).
-- [ ] T012 [US1] Confirm `BrushTool.move()` in `src/tools/pencil.ts` inherits the fix through `doc.line()`, and that its first-point handling still paints the press pixel.
-- [ ] T013 [US1] Rewrite `src/tools/line.ts` to preview and commit with `walkConnected`, so the ghost matches what gets drawn (TL-6).
-- [ ] T014 [US1] Verify Scenario 1 of `specs/002-editor-workflow/quickstart.md`: diagonal runs give one net, axis-aligned runs are pixel-identical to before, and a fast diagonal pencil drag in the browser produces a single net.
-- [ ] T015 [US1] Re-record nothing: run `npm run verify` and confirm all 22 schematics still match `scripts/verify/baseline.json` — the fix changes what the editor writes, never how anything is read (SC-010).
+- [X] T011 [US1] Route `CircuitDocument.line()` in `src/document.ts` through `walkConnected` from `src/geometry.ts`, replacing the Bresenham loop (FR-001).
+- [X] T012 [US1] Confirm `BrushTool.move()` in `src/tools/pencil.ts` inherits the fix through `doc.line()`, and that its first-point handling still paints the press pixel.
+- [X] T013 [US1] Rewrite `src/tools/line.ts` to preview and commit with `walkConnected`, so the ghost matches what gets drawn (TL-6).
+- [X] T014 [US1] Verify Scenario 1 of `specs/002-editor-workflow/quickstart.md`: diagonal runs give one net, axis-aligned runs are pixel-identical to before, and a fast diagonal pencil drag in the browser produces a single net.
+- [X] T015 [US1] Re-record nothing: run `npm run verify` and confirm all 22 schematics still match `scripts/verify/baseline.json` — the fix changes what the editor writes, never how anything is read (SC-010).
 
 **Checkpoint**: the shipped connectivity bug is gone. Worth landing alone.
 
@@ -73,12 +73,12 @@ all depend on the shared machinery built in Phase 2.
 
 **Independent Test**: Enter edit mode; the cycle counter stops. Right-drag; pixels erase.
 
-- [ ] T016 [US2] Record the run state on entering edit mode and restore it on leaving, in `src/ui.ts` (FR-004, research R10).
-- [ ] T017 [US2] Suppress all wire poking while in edit mode in `src/ui.ts` — remove the right-click toggle and the left-button drive from the edit-mode path (FR-003).
-- [ ] T018 [US2] Add an optional secondary-button behaviour to the `Tool` interface in `src/tools/types.ts`, so a tool can act differently on the right button without becoming two tools.
-- [ ] T019 [US2] Implement right-button erasing in `src/tools/pencil.ts` using the same connected interpolation as drawing (FR-006).
-- [ ] T020 [US2] Route the secondary button through `src/editor.ts`, framing it as a stroke like any other so it is one undo step.
-- [ ] T021 [US2] Verify Scenario 2 of `specs/002-editor-workflow/quickstart.md`: pause on enter, restore on exit, stays paused when entered paused, no wire changes under any click, right-drag erases, Space still runs (SC-003).
+- [X] T016 [US2] Record the run state on entering edit mode and restore it on leaving, in `src/ui.ts` (FR-004, research R10).
+- [X] T017 [US2] Suppress all wire poking while in edit mode in `src/ui.ts` — remove the right-click toggle and the left-button drive from the edit-mode path (FR-003).
+- [X] T018 [US2] Add an optional secondary-button behaviour to the `Tool` interface in `src/tools/types.ts`, so a tool can act differently on the right button without becoming two tools.
+- [X] T019 [US2] Implement right-button erasing in `src/tools/pencil.ts` using the same connected interpolation as drawing (FR-006).
+- [X] T020 [US2] Route the secondary button through `src/editor.ts`, framing it as a stroke like any other so it is one undo step.
+- [X] T021 [US2] Verify Scenario 2 of `specs/002-editor-workflow/quickstart.md`: pause on enter, restore on exit, stays paused when entered paused, no wire changes under any click, right-drag erases, Space still runs (SC-003).
 
 **Checkpoint**: US1 + US2 are a shippable increment — one correctness fix and one interaction fix.
 
@@ -90,12 +90,12 @@ all depend on the shared machinery built in Phase 2.
 
 **Independent Test**: Scroll over the colour tool; the active colour advances.
 
-- [ ] T022 [P] [US3] Add the palette popover markup to `index.html` and its handles to `src/dom.ts`: a 16-swatch grid, custom entries, and an add control.
-- [ ] T023 [P] [US3] Style the palette popover and swatch states in `css/style.css`, including which swatch is active.
-- [ ] T024 [US3] Wire the palette into `src/editor.ts` as the source of the active colour, replacing the single stored value (depends on T007).
-- [ ] T025 [US3] Register the colour control's `ToolParameter` in `src/editor.ts` so the wheel cycles the palette and the event is consumed (FR-009, depends on T008).
-- [ ] T026 [US3] Persist custom colours and the active index in `src/settings.ts`, validated on read like the existing preferences (FR-010, P5).
-- [ ] T027 [US3] Verify Scenario 3 of `specs/002-editor-workflow/quickstart.md`: 16 valid defaults, wheel cycles without moving the canvas, custom colour survives reload, `#202020` refused with a reason.
+- [X] T022 [P] [US3] Add the palette popover markup to `index.html` and its handles to `src/dom.ts`: a 16-swatch grid, custom entries, and an add control.
+- [X] T023 [P] [US3] Style the palette popover and swatch states in `css/style.css`, including which swatch is active.
+- [X] T024 [US3] Wire the palette into `src/editor.ts` as the source of the active colour, replacing the single stored value (depends on T007).
+- [X] T025 [US3] Register the colour control's `ToolParameter` in `src/editor.ts` so the wheel cycles the palette and the event is consumed (FR-009, depends on T008).
+- [X] T026 [US3] Persist custom colours and the active index in `src/settings.ts`, validated on read like the existing preferences (FR-010, P5).
+- [X] T027 [US3] Verify Scenario 3 of `specs/002-editor-workflow/quickstart.md`: 16 valid defaults, wheel cycles without moving the canvas, custom colour survives reload, `#202020` refused with a reason.
 
 ---
 
@@ -105,11 +105,11 @@ all depend on the shared machinery built in Phase 2.
 
 **Independent Test**: Width 4, one run, wire count +4.
 
-- [ ] T028 [US4] Draw N conductors in `src/tools/line.ts` using `busOffsets`, previewing all of them (FR-011, depends on T004, T013).
-- [ ] T029 [P] [US4] Add the line tool's width submenu to `index.html` and `src/dom.ts`, showing the current value.
-- [ ] T030 [US4] Register the line tool's `ToolParameter` in `src/editor.ts` so the wheel sets the width, clamped 1–16 (FR-013, depends on T008).
-- [ ] T031 [P] [US4] Persist the bus width in `src/settings.ts`.
-- [ ] T032 [US4] Verify Scenario 4 of `specs/002-editor-workflow/quickstart.md`: 80 headless cases give exactly N nets, and the browser count matches the displayed width (SC-004).
+- [X] T028 [US4] Draw N conductors in `src/tools/line.ts` using `busOffsets`, previewing all of them (FR-011, depends on T004, T013).
+- [X] T029 [P] [US4] Add the line tool's width submenu to `index.html` and `src/dom.ts`, showing the current value.
+- [X] T030 [US4] Register the line tool's `ToolParameter` in `src/editor.ts` so the wheel sets the width, clamped 1–16 (FR-013, depends on T008).
+- [X] T031 [P] [US4] Persist the bus width in `src/settings.ts`.
+- [X] T032 [US4] Verify Scenario 4 of `specs/002-editor-workflow/quickstart.md`: 80 headless cases give exactly N nets, and the browser count matches the displayed width (SC-004).
 
 ---
 
@@ -119,16 +119,16 @@ all depend on the shared machinery built in Phase 2.
 
 **Independent Test**: Copy a gate, paste it, commit; the gate count rises by one and the copy works.
 
-- [ ] T033 [US5] Add `readBlock`, `writeBlock` and `clearRect` to `src/document.ts`, obeying the existing stroke framing so each is one `Edit` (DC-1 … DC-3, depends on T005).
-- [ ] T034 [US5] Create `src/clipboard.ts` with selection state, the held block, and the floating-paste lifecycle (CB-1 … CB-7).
-- [ ] T035 [P] [US5] Create `src/tools/select.ts`: drag a normalised, clipped rectangle; writes nothing; a click clears (SE-1 … SE-4).
-- [ ] T036 [US5] Wire copy/cut/delete/paste/commit/cancel into `src/editor.ts` through `resolveKey`, with no key handling of its own (depends on T006, T034).
-- [ ] T037 [US5] Draw the selection marquee and the floating paste in `src/renderer.ts`'s overlay, distinct from the existing tool preview (F1).
-- [ ] T038 [US5] Move a floating paste by pointer drag in `src/tools/select.ts` and by arrow key through `resolveKey` (FR-017).
-- [ ] T039 [P] [US5] Add the 90° and −90° rotate controls to `index.html` and `src/dom.ts`, enabled only while a paste floats.
-- [ ] T040 [US5] Discard selection and floating paste when the document changes, in `src/ui.ts`, behind the existing unsaved-changes guard (CB-7).
-- [ ] T041 [US5] Verify Scenario 5 of `specs/002-editor-workflow/quickstart.md` headlessly via `scripts/verify/rotate.mjs`: rotate ×4 is identity, rotated gates behave as the rotated directions, copy mutates nothing, cancel is byte-identical with zero recompiles, commit is one edit and one recompile (SC-005, SC-006, SC-007).
-- [ ] T042 [US5] Verify the browser half of Scenario 5 of `specs/002-editor-workflow/quickstart.md`: select, cut, paste, nudge, rotate, Enter — and the same sequence ending in Escape.
+- [X] T033 [US5] Add `readBlock`, `writeBlock` and `clearRect` to `src/document.ts`, obeying the existing stroke framing so each is one `Edit` (DC-1 … DC-3, depends on T005).
+- [X] T034 [US5] Create `src/clipboard.ts` with selection state, the held block, and the floating-paste lifecycle (CB-1 … CB-7).
+- [X] T035 [P] [US5] Create `src/tools/select.ts`: drag a normalised, clipped rectangle; writes nothing; a click clears (SE-1 … SE-4).
+- [X] T036 [US5] Wire copy/cut/delete/paste/commit/cancel into `src/editor.ts` through `resolveKey`, with no key handling of its own (depends on T006, T034).
+- [X] T037 [US5] Draw the selection marquee and the floating paste in `src/renderer.ts`'s overlay, distinct from the existing tool preview (F1).
+- [X] T038 [US5] Move a floating paste by pointer drag in `src/tools/select.ts` and by arrow key through `resolveKey` (FR-017).
+- [X] T039 [P] [US5] Add the 90° and −90° rotate controls to `index.html` and `src/dom.ts`, enabled only while a paste floats.
+- [X] T040 [US5] Discard selection and floating paste when the document changes, in `src/ui.ts`, behind the existing unsaved-changes guard (CB-7).
+- [X] T041 [US5] Verify Scenario 5 of `specs/002-editor-workflow/quickstart.md` headlessly via `scripts/verify/rotate.mjs`: rotate ×4 is identity, rotated gates behave as the rotated directions, copy mutates nothing, cancel is byte-identical with zero recompiles, commit is one edit and one recompile (SC-005, SC-006, SC-007).
+- [X] T042 [US5] Verify the browser half of Scenario 5 of `specs/002-editor-workflow/quickstart.md`: select, cut, paste, nudge, rotate, Enter — and the same sequence ending in Escape.
 
 ---
 
@@ -138,10 +138,10 @@ all depend on the shared machinery built in Phase 2.
 
 **Independent Test**: In Paint.NET mode a plain notch pans vertically.
 
-- [ ] T043 [P] [US6] Create `src/viewport-camera.ts` with `applyWheel(scheme, viewport, e, local)`, `classic` reproducing today's behaviour exactly including the 120/256 notch (CM-1 … CM-3).
-- [ ] T044 [US6] Route the canvas wheel handler in `src/ui.ts` through it, keeping `{ passive: false }` and `preventDefault` so Ctrl+wheel never reaches the browser (FR-022, C1).
-- [ ] T045 [P] [US6] Add the scheme setting to the settings panel in `index.html` and `src/dom.ts`, and persist it in `src/settings.ts` (CM-4).
-- [ ] T046 [US6] Verify Scenario 6 of `specs/002-editor-workflow/quickstart.md`: both schemes behave as specified, page zoom never fires, classic is unchanged, choice persists.
+- [X] T043 [P] [US6] Create `src/viewport-camera.ts` with `applyWheel(scheme, viewport, e, local)`, `classic` reproducing today's behaviour exactly including the 120/256 notch (CM-1 … CM-3).
+- [X] T044 [US6] Route the canvas wheel handler in `src/ui.ts` through it, keeping `{ passive: false }` and `preventDefault` so Ctrl+wheel never reaches the browser (FR-022, C1).
+- [X] T045 [P] [US6] Add the scheme setting to the settings panel in `index.html` and `src/dom.ts`, and persist it in `src/settings.ts` (CM-4).
+- [X] T046 [US6] Verify Scenario 6 of `specs/002-editor-workflow/quickstart.md`: both schemes behave as specified, page zoom never fires, classic is unchanged, choice persists.
 
 ---
 
@@ -151,21 +151,21 @@ all depend on the shared machinery built in Phase 2.
 
 **Independent Test**: Press an arrow, see a cursor move one pixel, apply, see that pixel change.
 
-- [ ] T047 [US7] Add keyboard-cursor state to `src/editor.ts` — position, active flag, activation on first arrow, deactivation on pointer move and Escape (K1 … K4, depends on T006).
-- [ ] T048 [US7] Implement auto-repeat with acceleration in `src/ui.ts`, clamped so a held key cannot cross a large bitmap instantly (FR-023, KM-6).
-- [ ] T049 [US7] Apply the active tool at the cursor in `src/editor.ts`, through the same path a pointer click uses, so keyboard strokes are indistinguishable in undo (K5, FR-024).
-- [ ] T050 [P] [US7] Draw the keyboard cursor in `src/renderer.ts`'s overlay, visibly distinct from the hover outline since its presence is what tells the user Space will paint.
-- [ ] T051 [US7] Verify Scenario 7 of `specs/002-editor-workflow/quickstart.md`: one pixel per press, acceleration, apply hits the exact pixel, pointer reclaims control, and Space still pauses when the cursor is inactive (research R4).
+- [X] T047 [US7] Add keyboard-cursor state to `src/editor.ts` — position, active flag, activation on first arrow, deactivation on pointer move and Escape (K1 … K4, depends on T006).
+- [X] T048 [US7] Implement auto-repeat with acceleration in `src/ui.ts`, clamped so a held key cannot cross a large bitmap instantly (FR-023, KM-6).
+- [X] T049 [US7] Apply the active tool at the cursor in `src/editor.ts`, through the same path a pointer click uses, so keyboard strokes are indistinguishable in undo (K5, FR-024).
+- [X] T050 [P] [US7] Draw the keyboard cursor in `src/renderer.ts`'s overlay, visibly distinct from the hover outline since its presence is what tells the user Space will paint.
+- [X] T051 [US7] Verify Scenario 7 of `specs/002-editor-workflow/quickstart.md`: one pixel per press, acceleration, apply hits the exact pixel, pointer reclaims control, and Space still pauses when the cursor is inactive (research R4).
 
 ---
 
 ## Phase 10: Polish & Cross-Cutting Concerns
 
-- [ ] T052 [P] Document the editor workflow in `README.md`: palette, bus, selection and clipboard, camera schemes, keyboard cursor, and the precedence rules for Enter/Escape/Space.
-- [ ] T053 [P] Update `CLAUDE.md`: the shared modules and what each is for, the connectivity requirement, and that `resolveKey` is the only place key precedence lives.
-- [ ] T054 [P] Add `geometry.mjs`, `rotate.mjs` and `keymap.mjs` to the `verify` script in `package.json`.
-- [ ] T055 Verify Scenario 9 of `specs/002-editor-workflow/quickstart.md`: `npm run verify` fully green, and the 001 browser regression suite still passing on Chrome, Edge, Firefox and WebKit.
-- [ ] T056 Re-check the constitution: `npm run build` and `npx tsc --noEmit` clean, `package.json` dependencies still empty, `src/simulator.ts` untouched.
+- [X] T052 [P] Document the editor workflow in `README.md`: palette, bus, selection and clipboard, camera schemes, keyboard cursor, and the precedence rules for Enter/Escape/Space.
+- [X] T053 [P] Update `CLAUDE.md`: the shared modules and what each is for, the connectivity requirement, and that `resolveKey` is the only place key precedence lives.
+- [X] T054 [P] Add `geometry.mjs`, `rotate.mjs` and `keymap.mjs` to the `verify` script in `package.json`.
+- [X] T055 Verify Scenario 9 of `specs/002-editor-workflow/quickstart.md`: `npm run verify` fully green, and the 001 browser regression suite still passing on Chrome, Edge, Firefox and WebKit.
+- [X] T056 Re-check the constitution: `npm run build` and `npx tsc --noEmit` clean, `package.json` dependencies still empty, `src/simulator.ts` untouched.
 
 ---
 

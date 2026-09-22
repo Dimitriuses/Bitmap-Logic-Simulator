@@ -33,8 +33,20 @@ export function busOffsets(
 - **G-3 — Inclusive of both endpoints**, and starts at `(x0, y0)`.
 - **G-4 — Deterministic.** The same arguments always produce the same sequence; the
   staircase never alternates between runs.
-- **G-5 — Order-independent shape.** Walking B→A visits the same set of pixels as A→B. The
-  order may differ; the set may not, or a line would change when drawn backwards.
+- **G-5 — Endpoints, length and connectivity are direction-independent.** Walking B→A
+  visits the same number of pixels as A→B, starts and ends on the same two points, and is
+  equally connected.
+
+  It does **not** visit the same *set*. A staircase drawn from the other end mirrors: the
+  steps fall on the other side of the ideal line. Measured on a 45° run, both directions
+  give 73 pixels and one net, in different positions.
+
+  This was originally specified as full set-equality, which the implementation does not
+  provide and which nothing needs. Guaranteeing it would mean buffering every run so it
+  could be re-emitted in the requested order, to fix a cosmetic difference between drawing
+  a line left-to-right and right-to-left. The practical consequences are nil: the preview
+  and the commit walk in the same direction, so what you see is what you get, and the
+  pencil always walks previous-point → current-point.
 - **G-6 — No allocation per pixel.** This runs inside pointer-move handling and inside bus
   drawing, where it is called `count` times per stroke.
 

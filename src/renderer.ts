@@ -3,6 +3,7 @@
 // The transforms are the ones from UMain.pas:470-478, kept in the same form so
 // pan/zoom feels identical to the desktop original.
 
+import type { PixelBlock, Rect } from './block.js';
 import { toCss, type Rgba } from './colors.js';
 import type { Circuit } from './simulator.js';
 
@@ -107,6 +108,12 @@ export interface Overlay {
   /** Bitmap pixel under the pointer, or null. */
   readonly hover: Point | null;
   readonly showGrid: boolean;
+  /** The selection marquee, in bitmap pixels. */
+  readonly selection?: Rect | null;
+  /** A paste that is floating over the document but not part of it. */
+  readonly floating?: { block: PixelBlock; x: number; y: number } | null;
+  /** The keyboard cursor, drawn only while it is driving. */
+  readonly cursor?: Point | null;
 }
 
 function context2d(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
@@ -197,7 +204,10 @@ export class Renderer {
       overlay.pending.size > 0 ||
       overlay.preview.size > 0 ||
       overlay.hover !== null ||
-      overlay.showGrid;
+      overlay.showGrid ||
+      !!overlay.selection ||
+      !!overlay.floating ||
+      !!overlay.cursor;
     if (!hasWork) return; // costs nothing in simulate mode
 
     const { ctx } = this;
@@ -259,6 +269,35 @@ export class Renderer {
       ctx.globalAlpha = 1;
     }
 
+    // A floating paste sits above the document but is not part of it, so it is
+    // drawn here rather than written — that is what makes cancelling free.
+    const floating = overlay.floating;
+    if (floating) {
+      floating.block.forEach((bx, by, color) => {
+        ctx.fillStyle = toCss(color);
+        ctx.fillRect(sx(floating.x + bx), sy(floating.y + by), size, size);
+      });
+      ctx.strokeStyle = '#f2765e';
+      ctx.lineWidth = Math.max(1, d);
+      ctx.setLineDash([6 * d, 4 * d]);
+      ctx.strokeRect(
+        sx(floating.x) + 0.5,
+        sy(floating.y) + 0.5,
+        floating.block.width * zoom * d,
+        floating.block.height * zoom * d
+      );
+      ctx.setLineDash([]);
+    }
+
+    if (overlay.selection) {
+      const s = overlay.selection;
+      ctx.strokeStyle = '#5ec8f2';
+      ctx.lineWidth = Math.max(1, d);
+      ctx.setLineDash([5 * d, 3 * d]);
+      ctx.strokeRect(sx(s.x) + 0.5, sy(s.y) + 0.5, s.width * zoom * d, s.height * zoom * d);
+      ctx.setLineDash([]);
+    }
+
     if (overlay.hover) {
       // Outline the pixel the viewport transform actually resolves to. Deriving
       // it from a canvas-pixel corner instead is off by one at high zoom,
@@ -270,6 +309,20 @@ export class Renderer {
         sy(overlay.hover.y) + 0.5,
         Math.max(size - 1, 1),
         Math.max(size - 1, 1)
+      );
+    }
+
+    // The keyboard cursor is deliberately louder than the hover outline: its
+    // presence is the only thing telling the user that Space now paints.
+    if (overlay.cursor) {
+      ctx.strokeStyle = '#ffd166';
+      ctx.lineWidth = Math.max(2, d * 2);
+      const pad = Math.max(2, d * 2);
+      ctx.strokeRect(
+        sx(overlay.cursor.x) - pad,
+        sy(overlay.cursor.y) - pad,
+        size + pad * 2,
+        size + pad * 2
       );
     }
 

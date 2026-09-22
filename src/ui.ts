@@ -1,6 +1,6 @@
 // ui.ts — application shell: controls, input handling and the frame loop.
 
-import { fromHex, toHex, type Rgba } from './colors.js';
+import { fromHex, toCss, toHex, type Rgba } from './colors.js';
 import { queryDom, type Dom } from './dom.js';
 import { CircuitDocument } from './document.js';
 import { Editor, type EditorMode } from './editor.js';
@@ -15,6 +15,8 @@ import {
   supportsLiveReload,
   type ExampleEntry,
 } from './fileHandler.js';
+import { resolveKey, type InputAction } from './keymap.js';
+import { Palette } from './palette.js';
 import { saveDocument } from './png.js';
 import { Renderer, Viewport, type Overlay, type Point } from './renderer.js';
 import { Circuit, type Poke } from './simulator.js';
@@ -28,9 +30,7 @@ import {
 } from './settings.js';
 import type { GateDirection } from './stamps.js';
 import type { PixelPoint, ToolId } from './tools/types.js';
-
-// One Windows wheel notch is 120 units and the original scales by 1/256.
-const WHEEL_EXP = 120 / 256;
+import { applyWheel, type CameraScheme } from './viewport-camera.js';
 
 /** Movement in CSS pixels below which a touch still counts as a tap. */
 const TAP_SLOP = 8;
@@ -38,6 +38,10 @@ const TAP_SLOP = 8;
 /** Simulation catch-up limits, so a backgrounded tab does not stall on return. */
 const MAX_CATCHUP_MS = 250;
 const MAX_TICKS_PER_FRAME = 16;
+
+/** Held-arrow acceleration: repeats between each speed-up, and the cap. */
+const REPEAT_RAMP = 6;
+const MAX_STEP = 8;
 
 interface TapCandidate {
   readonly x: number;
@@ -64,8 +68,12 @@ class App {
   private examples: ExampleEntry[] = [];
 
   private running = true;
+  /** Run state recorded on entering edit mode, restored on leaving it. */
+  private runningBeforeEdit: boolean | null = null;
+
   private readonly settings: Settings = readSettings();
   private readonly prefs: EditorPrefs = readEditorPrefs();
+  private cameraScheme: CameraScheme;
 
   private accumulator = 0;
   private lastFrame = performance.now();
@@ -81,23 +89,25 @@ class App {
   private pinch: Pinch | null = null;
   private panning = false;
   private tapCandidate: TapCandidate | null = null;
-  /** World point of the wire being pulsed by the left button. */
+  /** World point of the wire being pulsed by the left button, simulate mode only. */
   private held: Point | null = null;
-  /** Bitmap pixel under the pointer, for the editor's hover cursor. */
   private hover: PixelPoint | null = null;
-  /** A manual state change needs a repaint even if paused. */
   private dirty = false;
+  /** Consecutive auto-repeats of a held arrow key, for acceleration. */
+  private repeats = 0;
 
   constructor() {
     this.dom = queryDom();
     this.renderer = new Renderer(this.dom.canvas);
     this.canvasRect = this.dom.canvas.getBoundingClientRect();
-    this.editor = new Editor(() => this.recompile());
+    this.cameraScheme = this.prefs.cameraScheme;
 
+    const palette = new Palette(this.prefs.customColors, this.prefs.activeColorIndex);
+    this.editor = new Editor(() => this.recompile(), palette);
     this.editor.mode = this.prefs.mode;
     this.editor.tool = this.prefs.tool;
     this.editor.direction = this.prefs.direction;
-    this.editor.setColor(this.prefs.color);
+    this.editor.setBusWidth(this.prefs.busWidth);
 
     this.#bindControls();
     this.#bindEditorControls();
@@ -115,9 +125,9 @@ class App {
     );
 
     this.#applySettingsToInputs();
+    this.#renderPalette();
     this.#applyEditorToInputs();
 
-    // An edited circuit that has not been saved must not vanish silently.
     window.addEventListener('beforeunload', (e) => {
       if (!this.doc?.dirty) return;
       e.preventDefault();
@@ -125,7 +135,6 @@ class App {
     });
   }
 
-  /** Populate the examples menu, load the first circuit, start the loop. */
   async start(): Promise<void> {
     requestAnimationFrame(this.frame);
     await this.#populateExamples();
@@ -137,7 +146,6 @@ class App {
   // -------------------------------------------------------------------
 
   async #bootstrap(): Promise<void> {
-    // ?file= is a site-relative path, e.g. ?file=projects/CPU/ALU.png
     const param = new URLSearchParams(location.search).get('file');
     if (param && !/^[a-z]+:/i.test(param)) {
       const name = param.split('/').pop() ?? param;
@@ -146,8 +154,7 @@ class App {
       return;
     }
 
-    const first =
-      this.examples.find((e) => e.path === DEFAULT_EXAMPLE) ?? this.examples[0] ?? null;
+    const first = this.examples.find((e) => e.path === DEFAULT_EXAMPLE) ?? this.examples[0] ?? null;
     if (!first) {
       this.toast('No example schematics found. Drop a PNG to start.', true);
       return;
@@ -156,11 +163,6 @@ class App {
     await this.load(exampleSource(first));
   }
 
-  /**
-   * @param source    where the schematic comes from
-   * @param preloaded already-decoded pixels (live reload)
-   * @param keepState carry wire states over from the running circuit
-   */
   async load(source: FileSource, preloaded: ImageData | null = null, keepState = false) {
     try {
       const imageData = preloaded ?? (await source.read());
@@ -169,8 +171,7 @@ class App {
       const doc = CircuitDocument.fromImageData(source.name, imageData);
       const circuit = doc.compile(keepState ? this.prevRender() : null);
       // A recompile builds a fresh Circuit, whose cycle counter starts at zero.
-      // Carrying it over keeps a live reload or an edit from looking like a
-      // restart in the status bar, which is the one place the user would see one.
+      // Carrying it over keeps an edit from looking like a restart.
       if (keepState) circuit.cycle = this.circuit?.cycle ?? circuit.cycle;
       const loadMs = performance.now() - t0;
 
@@ -185,7 +186,7 @@ class App {
       if (isNewFile && !keepState) this.viewport.fit();
 
       this.#showCircuitInfo(source, circuit);
-      this.#refreshEditorState();
+      this.#applyEditorToInputs();
       if (!keepState) {
         const gates = circuit.gateCount.toLocaleString();
         this.toast(`${source.name} — ${gates} gates in ${loadMs.toFixed(0)} ms`);
@@ -196,7 +197,6 @@ class App {
     }
   }
 
-  /** The previous frame, so wire state carries across a recompile. */
   private prevRender() {
     const previous = this.circuit;
     if (!previous) return null;
@@ -204,9 +204,8 @@ class App {
   }
 
   /**
-   * Rebuild the circuit from the document. Called once per completed stroke and
-   * once per undo/redo — never per pointer event, which at ~190 ms for Enigma2
-   * would look like a hang.
+   * Rebuild the circuit from the document. Once per completed action — never
+   * per pointer event, which at ~190 ms for Enigma2 would look like a hang.
    */
   private recompile(): void {
     const doc = this.doc;
@@ -239,10 +238,8 @@ class App {
     dom.statGates.textContent = circuit.gateCount.toLocaleString();
   }
 
-  /** Build the Examples dropdown, one <optgroup> per folder under projects/. */
   async #populateExamples(): Promise<void> {
     this.examples = await loadExampleList();
-
     const select = this.dom.examples;
     const groups = new Map<string, HTMLOptGroupElement>();
     for (const entry of this.examples) {
@@ -260,7 +257,6 @@ class App {
     }
   }
 
-  /** Guard against throwing away unsaved drawing. */
   private confirmDiscard(): boolean {
     if (!this.doc?.dirty) return true;
     return window.confirm('This circuit has unsaved edits. Discard them?');
@@ -289,14 +285,18 @@ class App {
 
     dom.examples.addEventListener('change', () => {
       const entry = this.examples.find((e) => e.path === dom.examples.value);
-      if (!entry) return;
-      if (!this.confirmDiscard()) return;
+      if (!entry || !this.confirmDiscard()) return;
       void this.load(exampleSource(entry));
     });
 
     dom.play.addEventListener('click', () => this.togglePlay());
     dom.reset.addEventListener('click', () => void this.reset());
     dom.fit.addEventListener('click', () => this.viewport.fit());
+
+    dom.camera.addEventListener('change', () => {
+      this.cameraScheme = dom.camera.value === 'paint' ? 'paint' : 'classic';
+      this.persistEditor();
+    });
 
     this.#bindSlider(dom.speed, dom.speedValue, 'speedHz', (v) => `${v} Hz`);
     this.#bindSlider(dom.passes, dom.passesValue, 'passes', (v) => `${v}×`);
@@ -324,6 +324,7 @@ class App {
     dom.passesValue.textContent = `${settings.passes}×`;
     dom.refresh.value = String(settings.fileRefreshMs);
     dom.refreshValue.textContent = `${settings.fileRefreshMs} ms`;
+    dom.camera.value = this.cameraScheme;
   }
 
   // -------------------------------------------------------------------
@@ -333,14 +334,23 @@ class App {
   #bindEditorControls(): void {
     const { dom } = this;
 
-    dom.modeToggle.addEventListener('click', () => this.setMode(
-      this.editor.mode === 'edit' ? 'simulate' : 'edit'
-    ));
+    // Clicking a toolbar control must not leave focus on it. Enter and Space
+    // are the HTML activation keys for <button>, so a focused toolbar button
+    // competes for exactly the keys the editor depends on — measured: Enter
+    // re-activated the button and never reached the paste-commit handler.
+    // preventDefault on mousedown suppresses focus-on-click while leaving Tab
+    // navigation working for anyone who deliberately tabs there.
+    dom.toolbar.addEventListener('mousedown', (e) => {
+      if ((e.target as HTMLElement | null)?.closest('button')) e.preventDefault();
+    });
+
+    dom.modeToggle.addEventListener('click', () =>
+      this.setMode(this.editor.mode === 'edit' ? 'simulate' : 'edit')
+    );
 
     for (const button of dom.tools) {
       button.addEventListener('click', () => {
         this.editor.tool = button.dataset.tool as ToolId;
-        // Reaching for a tool means you intend to draw.
         if (this.editor.mode !== 'edit') this.setMode('edit');
         else this.#applyEditorToInputs();
         this.persistEditor();
@@ -355,26 +365,103 @@ class App {
       });
     }
 
-    dom.wireColor.addEventListener('input', () => {
-      const parsed = fromHex(dom.wireColor.value);
-      if (parsed === null) return;
-      if (!this.editor.setColor(parsed)) {
-        // Rejected rather than silently corrected: a colour the engine reads as
-        // insulation would draw wire that looks right and does not conduct.
-        this.toast('Too dark to be a wire — one channel must be 224 or brighter.', true);
-        dom.wireColor.value = toHex(this.editor.color);
-        return;
-      }
+    dom.busWidth.addEventListener('input', () => {
+      this.editor.setBusWidth(Number(dom.busWidth.value));
+      this.#applyEditorToInputs();
       this.persistEditor();
     });
+
+    dom.wireColor.addEventListener('click', () => {
+      const open = dom.palette.hidden;
+      dom.palette.hidden = !open;
+      dom.wireColor.setAttribute('aria-expanded', String(open));
+    });
+
+    dom.paletteAdd.addEventListener('click', () => {
+      const parsed = fromHex(dom.paletteInput.value);
+      if (parsed === null) return;
+      if (!this.editor.setColor(parsed)) {
+        // Refused rather than silently brightened: wire that does not conduct
+        // looks exactly like wire that does.
+        this.toast('Too dark to be a wire — one channel must be 224 or brighter.', true);
+        return;
+      }
+      this.#renderPalette();
+      this.#applyEditorToInputs();
+      this.persistEditor();
+    });
+
+    dom.rotateCw.addEventListener('click', () => this.#rotate('cw'));
+    dom.rotateCcw.addEventListener('click', () => this.#rotate('ccw'));
+
+    // A notch over a control that owns a parameter adjusts it and is consumed,
+    // so it never also scrolls the page or reaches the camera.
+    for (const param of this.editor.parameters()) {
+      const target = document.getElementById(param.id);
+      if (!target) continue;
+      target.addEventListener(
+        'wheel',
+        (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          param.step(-Math.sign(e.deltaY));
+          this.#renderPalette();
+          this.#applyEditorToInputs();
+          this.persistEditor();
+          this.toast(param.describe());
+        },
+        { passive: false }
+      );
+    }
 
     dom.undo.addEventListener('click', () => this.undo());
     dom.redo.addEventListener('click', () => this.redo());
     dom.save.addEventListener('click', () => void this.save());
   }
 
+  #rotate(direction: 'cw' | 'ccw'): void {
+    this.editor.rotatePaste(direction);
+    this.dirty = true;
+  }
+
+  #renderPalette(): void {
+    const { dom, editor } = this;
+    dom.paletteGrid.replaceChildren();
+    editor.palette.colors.forEach((color, index) => {
+      const swatch = document.createElement('button');
+      swatch.type = 'button';
+      swatch.className = 'swatch';
+      swatch.style.background = toCss(color);
+      swatch.title = toHex(color);
+      swatch.classList.toggle('active', index === editor.palette.activeIndex);
+      swatch.addEventListener('click', () => {
+        editor.palette.select(index);
+        this.#renderPalette();
+        this.#applyEditorToInputs();
+        this.persistEditor();
+      });
+      dom.paletteGrid.appendChild(swatch);
+    });
+  }
+
   setMode(mode: EditorMode): void {
+    const wasEditing = this.editor.mode === 'edit';
     this.editor.mode = mode;
+
+    if (mode === 'edit' && !wasEditing) {
+      // A circuit that keeps evaluating while you rewire it changes underneath
+      // you for reasons that look like your edit. Remember the run state so
+      // leaving restores it, rather than always resuming.
+      this.runningBeforeEdit = this.running;
+      if (this.running) this.togglePlay(false);
+    } else if (mode === 'simulate' && wasEditing) {
+      this.editor.cancelPaste();
+      this.editor.deactivateCursor();
+      if (this.runningBeforeEdit !== null) this.togglePlay(this.runningBeforeEdit);
+      this.runningBeforeEdit = null;
+      this.dirty = true;
+    }
+
     this.#applyEditorToInputs();
     this.persistEditor();
   }
@@ -387,6 +474,7 @@ class App {
     dom.modeToggle.textContent = editing ? '✎ Editing' : '✎ Edit';
     dom.toolbar.hidden = !editing;
     dom.canvas.classList.toggle('editing', editing);
+    dom.canvas.classList.toggle('selecting', editing && editor.tool === 'select');
 
     for (const button of dom.tools) {
       button.classList.toggle('active', button.dataset.tool === editor.tool);
@@ -394,11 +482,17 @@ class App {
     for (const button of dom.directions) {
       button.classList.toggle('active', button.dataset.dir === editor.direction);
     }
-    dom.wireColor.value = toHex(editor.color);
+    dom.busWidth.value = String(editor.busWidth);
+    dom.wireSwatch.style.background = toCss(editor.color);
+    dom.paletteInput.value = toHex(editor.color);
+
+    const floating = editor.floating !== null;
+    dom.rotateCw.disabled = !floating;
+    dom.rotateCcw.disabled = !floating;
+
     this.#refreshEditorState();
   }
 
-  /** Undo/redo availability and the unsaved marker. */
   #refreshEditorState(): void {
     const { dom, doc } = this;
     dom.undo.disabled = !doc?.canUndo;
@@ -407,10 +501,15 @@ class App {
   }
 
   private persistEditor(): void {
-    this.prefs.mode = this.editor.mode;
-    this.prefs.tool = this.editor.tool;
-    this.prefs.color = this.editor.color;
-    this.prefs.direction = this.editor.direction;
+    const { editor } = this;
+    this.prefs.mode = editor.mode;
+    this.prefs.tool = editor.tool;
+    this.prefs.color = editor.color;
+    this.prefs.direction = editor.direction;
+    this.prefs.customColors = [...editor.palette.custom];
+    this.prefs.activeColorIndex = editor.palette.activeIndex;
+    this.prefs.busWidth = editor.busWidth;
+    this.prefs.cameraScheme = this.cameraScheme;
     writeEditorPrefs(this.prefs);
   }
 
@@ -448,10 +547,8 @@ class App {
     this.dom.play.classList.toggle('paused', !this.running);
   }
 
-  /** Reload the file from scratch, discarding all wire states. */
   async reset(): Promise<void> {
-    if (!this.source) return;
-    if (!this.confirmDiscard()) return;
+    if (!this.source || !this.confirmDiscard()) return;
     await this.load(this.source);
   }
 
@@ -487,9 +584,14 @@ class App {
     return this.viewport.toWorld(p.x, p.y);
   }
 
-  /** The bitmap pixel under an event, which is what tools operate on. */
   #pixelAt(e: PointerEvent): PixelPoint {
     const w = this.#worldAt(e);
+    return { x: Math.floor(w.x), y: Math.floor(w.y) };
+  }
+
+  /** Bitmap pixel at the centre of the view — where a paste lands by default. */
+  #viewCentre(): PixelPoint {
+    const w = this.viewport.toWorld(this.viewport.canvasWidth / 2, this.viewport.canvasHeight / 2);
     return { x: Math.floor(w.x), y: Math.floor(w.y) };
   }
 
@@ -501,21 +603,14 @@ class App {
     canvas.addEventListener(
       'wheel',
       (e) => {
+        // Without preventDefault a plain notch scrolls the page and Ctrl+notch
+        // zooms the whole document, which would make the paint scheme unusable.
         e.preventDefault();
-        const p = this.#local(e);
-        // deltaMode 1 is lines, 2 is pages; normalise everything to notches.
-        const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 100;
-        this.viewport.zoomAt(p.x, p.y, (-e.deltaY / unit) * WHEEL_EXP);
+        applyWheel(this.cameraScheme, this.viewport, e, this.#local(e));
       },
       { passive: false }
     );
 
-    // Touch pointers live in `pointers` and drive the gestures; mouse and pen
-    // are handled by button and never enter that map, so a mouse button whose
-    // release went missing can never be mistaken for a pinching finger.
-    //
-    // Touch never draws: editing targets pointer input, and taking the single
-    // -finger drag for drawing would cost the pan gesture on phones.
     canvas.addEventListener('pointerdown', (e) => {
       canvas.setPointerCapture(e.pointerId);
 
@@ -529,19 +624,21 @@ class App {
 
       this.lastMouse = this.#local(e);
 
-      // Edit mode claims the left button; everything else is unchanged.
       if (this.editor.handlePointerDown(e, this.#pixelAt(e))) {
         this.dirty = true;
+        this.#applyEditorToInputs();
         return;
       }
+      // In edit mode the editor owns both buttons, so nothing below can run and
+      // no click can drive or toggle a wire.
+      if (this.editor.mode === 'edit') return;
 
       if (e.button === 1) {
         this.panning = true;
         e.preventDefault();
       } else if (e.button === 0) {
-        // Left click pulses the wire HIGH for as long as it is held. The
-        // original resolves press and release against the *press* position, so
-        // dragging away and letting go still releases the wire you grabbed.
+        // Left click pulses the wire HIGH for as long as it is held, resolved
+        // against the press position so dragging away still releases it.
         const w = this.#worldAt(e);
         this.held = w;
         this.#poke(w, '1');
@@ -560,7 +657,6 @@ class App {
         if (this.pointers.size >= 2) {
           this.#updatePinch();
         } else {
-          // tapCandidate is null when this finger is the survivor of a pinch.
           if (this.tapCandidate) {
             this.tapCandidate.moved += Math.abs(now.x - prev.x) + Math.abs(now.y - prev.y);
           }
@@ -574,6 +670,11 @@ class App {
 
       if (this.editor.mode === 'edit') {
         this.hover = this.#pixelAt(e);
+        // The pointer reclaims control from the keyboard cursor.
+        if (this.editor.cursorActive) {
+          this.editor.deactivateCursor();
+          this.dirty = true;
+        }
         if (this.editor.handlePointerMove(e, this.hover)) {
           this.dirty = true;
           return;
@@ -589,9 +690,9 @@ class App {
       if (e.pointerType === 'touch') {
         if (!this.pointers.delete(e.pointerId)) return;
         if (this.pointers.size < 2) this.pinch = null;
-        // A touch that barely moved is a tap: toggle the wire under it.
         const tap = this.tapCandidate;
-        if (tap && tap.moved < TAP_SLOP) {
+        // Touch never edits; in edit mode a tap must not poke a wire either.
+        if (tap && tap.moved < TAP_SLOP && this.editor.mode !== 'edit') {
           this.#poke(this.viewport.toWorld(tap.x, tap.y), 'x');
         }
         if (this.pointers.size === 0) this.tapCandidate = null;
@@ -600,8 +701,10 @@ class App {
 
       if (this.editor.handlePointerUp(e, this.#pixelAt(e))) {
         this.dirty = true;
+        this.#applyEditorToInputs();
         return;
       }
+      if (this.editor.mode === 'edit') return;
 
       if (e.button === 1) this.panning = false;
       if (e.button === 0 && this.held) {
@@ -611,7 +714,7 @@ class App {
     };
     canvas.addEventListener('pointerup', release);
     canvas.addEventListener('pointercancel', (e) => {
-      if (this.editor.drawing) this.editor.cancel();
+      if (this.editor.drawing) this.editor.cancelStroke();
       release(e);
     });
 
@@ -620,7 +723,6 @@ class App {
     });
   }
 
-  /** Apply a manual wire state and make sure it shows even while paused. */
   #poke(world: Point, what: Poke): void {
     if (!this.circuit) return;
     this.circuit.setStateAt(world.x, world.y, what);
@@ -647,79 +749,141 @@ class App {
     if (!a || !b) return;
     const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
     const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-
     this.viewport.panBy(mid.x - previous.mid.x, mid.y - previous.mid.y);
     this.viewport.zoomAt(mid.x, mid.y, Math.log2(dist / previous.dist));
     this.pinch = { dist, mid };
   }
 
+  // -------------------------------------------------------------------
+  // Keyboard — every decision comes from resolveKey
+  // -------------------------------------------------------------------
+
   #bindKeyboard(): void {
     window.addEventListener('keydown', (e) => {
-      // Leave the sliders and the select alone while they have focus.
-      const tag = e.target instanceof HTMLElement ? e.target.tagName : '';
-      const typing = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
-
-      if (e.ctrlKey || e.metaKey) {
-        const key = e.key.toLowerCase();
-        if (key === 'z') {
-          e.preventDefault();
-          if (e.shiftKey) this.redo();
-          else this.undo();
-          return;
+      const action = resolveKey(
+        {
+          key: e.key,
+          ctrlKey: e.ctrlKey,
+          metaKey: e.metaKey,
+          shiftKey: e.shiftKey,
+          targetTag: e.target instanceof HTMLElement ? e.target.tagName : undefined,
+        },
+        {
+          mode: this.editor.mode,
+          hasFloating: this.editor.floating !== null,
+          cursorActive: this.editor.cursorActive,
+          hasSelection: this.editor.selection !== null,
         }
-        if (key === 'y') {
-          e.preventDefault();
-          this.redo();
-          return;
-        }
-        if (key === 's') {
-          e.preventDefault();
-          void this.save();
-          return;
-        }
+      );
+      if (!action) {
+        this.repeats = 0;
         return;
       }
+      // Held arrows accelerate; anything else resets the ramp.
+      this.repeats = e.repeat ? this.repeats + 1 : 0;
+      if (this.#perform(action)) e.preventDefault();
+    });
 
-      switch (e.key) {
-        case 'Escape':
-          this.toggleSettings();
-          break;
-        case ' ':
-          if (typing) return;
-          e.preventDefault();
-          this.togglePlay();
-          break;
-        case 'e':
-        case 'E':
-          if (typing) return;
-          this.setMode(this.editor.mode === 'edit' ? 'simulate' : 'edit');
-          break;
-        case 'r':
-        case 'R':
-          if (typing) return;
-          void this.reset();
-          break;
-        case 'f':
-        case 'F':
-          if (typing) return;
-          this.viewport.fit();
-          break;
-        case '+':
-        case '=':
-          this.#zoomCentre(WHEEL_EXP);
-          break;
-        case '-':
-        case '_':
-          this.#zoomCentre(-WHEEL_EXP);
-          break;
-        default:
-          break;
-      }
+    window.addEventListener('keyup', () => {
+      this.repeats = 0;
     });
   }
 
-  #zoomCentre(deltaExp: number): void {
-    this.viewport.zoomAt(this.viewport.canvasWidth / 2, this.viewport.canvasHeight / 2, deltaExp);
+  /** How far one arrow press moves, growing while the key is held. */
+  #step(): number {
+    return Math.min(MAX_STEP, 1 + Math.floor(this.repeats / REPEAT_RAMP));
+  }
+
+  /** Returns true when the default action should be suppressed. */
+  #perform(action: NonNullable<InputAction>): boolean {
+    const step = this.#step();
+    switch (action.kind) {
+      case 'move':
+        if (action.target === 'paste') this.editor.moveFloating(action.dx * step, action.dy * step);
+        else this.editor.moveCursor(action.dx * step, action.dy * step);
+        this.dirty = true;
+        return true;
+      case 'activateCursor':
+        this.editor.activateCursor(action.dx * step, action.dy * step);
+        this.dirty = true;
+        return true;
+      case 'deactivateCursor':
+        this.editor.deactivateCursor();
+        this.dirty = true;
+        return true;
+      case 'applyTool':
+        this.editor.applyAtCursor();
+        this.dirty = true;
+        return true;
+      case 'commit':
+        this.editor.commitPaste();
+        this.dirty = true;
+        this.#applyEditorToInputs();
+        return true;
+      case 'cancelPaste':
+        this.editor.cancelPaste();
+        this.dirty = true;
+        this.#applyEditorToInputs();
+        return true;
+      case 'clearSelection':
+        this.editor.clipboard.clearSelection();
+        this.dirty = true;
+        return true;
+      case 'clearRegion':
+        this.editor.clearRegion();
+        return true;
+      case 'copy': {
+        const copied = this.editor.copy();
+        this.toast(copied ? 'Copied' : 'Nothing selected.', !copied);
+        return true;
+      }
+      case 'cut':
+        if (this.editor.cut()) this.toast('Cut');
+        return true;
+      case 'paste': {
+        const centre = this.#viewCentre();
+        if (this.editor.mode !== 'edit') this.setMode('edit');
+        if (!this.editor.paste(centre.x, centre.y)) {
+          this.toast('Nothing to paste — select something and copy it first.', true);
+        }
+        this.dirty = true;
+        this.#applyEditorToInputs();
+        return true;
+      }
+      case 'undo':
+        this.undo();
+        return true;
+      case 'redo':
+        this.redo();
+        return true;
+      case 'save':
+        void this.save();
+        return true;
+      case 'togglePause':
+        this.togglePlay();
+        return true;
+      case 'toggleSettings':
+        this.toggleSettings();
+        return false;
+      case 'toggleMode':
+        this.setMode(this.editor.mode === 'edit' ? 'simulate' : 'edit');
+        return false;
+      case 'reset':
+        void this.reset();
+        return false;
+      case 'fit':
+        this.viewport.fit();
+        return false;
+      case 'zoom':
+        this.viewport.zoomAt(
+          this.viewport.canvasWidth / 2,
+          this.viewport.canvasHeight / 2,
+          action.direction * (120 / 256)
+        );
+        return false;
+      default:
+        return false;
+    }
   }
 
   // -------------------------------------------------------------------
@@ -763,12 +927,13 @@ class App {
     const editing = this.editor.mode === 'edit';
     const doc = this.doc;
     return {
-      // Pixels painted since the last compile: the circuit does not know about
-      // them yet, and render() would not draw them.
       pending: doc ? doc.pendingEdits() : EMPTY_PIXELS,
       preview: editing && this.hover ? this.editor.previewAt(this.hover) : EMPTY_PIXELS,
       hover: editing ? this.hover : null,
       showGrid: editing,
+      selection: editing ? this.editor.selection : null,
+      floating: editing ? this.editor.floating : null,
+      cursor: editing && this.editor.cursorActive ? this.editor.cursor : null,
     };
   }
 
@@ -797,10 +962,7 @@ class App {
     try {
       const fresh = await source.poll();
       if (!fresh) return;
-      // An external change while the user has unsaved drawing is a genuine
-      // conflict. Reloading would silently destroy their work, so say so and
-      // leave the document alone. (Our own writes never reach here: write()
-      // refreshes the poll stamp.)
+      // Our own writes never reach here: write() refreshes the poll stamp.
       if (this.doc?.dirty) {
         this.toast('The file changed on disk, but you have unsaved edits. Save or reset.', true);
         return;
