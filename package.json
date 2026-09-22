@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "serve": "python -m http.server 8000",
-    "start": "npm run build && npm run serve"
+    "start": "npm run build && npm run serve",
+    "verify": "node scripts/verify/counts.mjs && node scripts/verify/stamps.mjs",
+    "verify:baseline": "node scripts/verify/counts.mjs --save"
   },
   "devDependencies": {
     "typescript": "^5.9.2"

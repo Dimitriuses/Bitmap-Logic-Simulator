@@ -30,3 +30,21 @@ interface DataTransferItem {
   /** Resolves to null when the item is not backed by a file system entry. */
   getAsFileSystemHandle?(): Promise<FileSystemHandle | null>;
 }
+
+interface FileSystemHandlePermissionDescriptor {
+  mode?: 'read' | 'readwrite';
+}
+
+/**
+ * A handle from showOpenFilePicker() grants read access only; writing needs an
+ * explicit readwrite grant, and the request must originate from a user gesture.
+ * Neither method is in lib.dom.
+ */
+interface FileSystemHandle {
+  queryPermission?(
+    descriptor?: FileSystemHandlePermissionDescriptor
+  ): Promise<PermissionState>;
+  requestPermission?(
+    descriptor?: FileSystemHandlePermissionDescriptor
+  ): Promise<PermissionState>;
+}

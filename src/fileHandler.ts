@@ -123,6 +123,55 @@ export class FileSource {
     return this.origin.kind === 'handle';
   }
 
+  /**
+   * True when this source can be written back in place. Only a real file handle
+   * can be; bundled examples and `?file=` links are fetched over HTTP and have
+   * nothing to write to.
+   */
+  get canWrite(): boolean {
+    return this.origin.kind === 'handle' && typeof this.origin.handle.createWritable === 'function';
+  }
+
+  /**
+   * Ask for read-write access. A handle from showOpenFilePicker() is read-only
+   * until this succeeds, and the prompt requires a live user gesture — so this
+   * must be reached without an intervening await that breaks the gesture chain.
+   */
+  async requestWriteAccess(): Promise<boolean> {
+    const origin = this.origin;
+    if (origin.kind !== 'handle') return false;
+    const handle = origin.handle;
+    try {
+      const query = await handle.queryPermission?.({ mode: 'readwrite' });
+      if (query === 'granted') return true;
+      const granted = await handle.requestPermission?.({ mode: 'readwrite' });
+      return granted === 'granted';
+    } catch {
+      return false; // older implementations without the permission methods
+    }
+  }
+
+  /**
+   * Write bytes back to the underlying file.
+   *
+   * Refreshing the stamp afterwards is load-bearing: poll() compares
+   * lastModified, and our own write changes it. Without this the very next poll
+   * would see an "external" change and recompile over whatever the user has
+   * drawn since.
+   */
+  async write(blob: Blob): Promise<void> {
+    const origin = this.origin;
+    if (origin.kind !== 'handle') throw new Error('This circuit cannot be written in place.');
+    const writable = await origin.handle.createWritable();
+    try {
+      await writable.write(blob);
+    } finally {
+      await writable.close();
+    }
+    const file = await origin.handle.getFile();
+    this.stamp = file.lastModified;
+  }
+
   async read(): Promise<ImageData> {
     const origin = this.origin;
     switch (origin.kind) {

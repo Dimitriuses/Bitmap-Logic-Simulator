@@ -10,6 +10,8 @@ _site/
 # it is someone else's work, binary included. Not in this repository's history.
 BmpLogicSim150902/
 
+*.log
+.env*
 *.local
 .DS_Store
 Thumbs.db

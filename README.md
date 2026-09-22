@@ -28,6 +28,10 @@ npm run serve     # python -m http.server 8000, from the repository root
 `npm start` does the build and the server in one go, and `npm run watch` keeps
 `tsc` recompiling while you work.
 
+`npm run verify` checks the engine without a browser: it compiles all 22
+schematics and compares them against a recorded baseline, then confirms every
+gate stamp the editor can place is one the simulator actually recognises.
+
 Serving over HTTP (rather than opening `index.html` off disk) is required:
 browsers will not let a page read pixels back out of a `file://` image, which is
 exactly what the simulator needs to do. Drag-and-drop still works either way.
@@ -48,6 +52,10 @@ scripts/            build helpers
 | [`src/simulator.ts`](src/simulator.ts) | The engine: wire extraction, gate detection, simulation, rendering. The port of `UMain.pas`. |
 | [`src/renderer.ts`](src/renderer.ts) | Viewport maths and canvas presentation. |
 | [`src/fileHandler.ts`](src/fileHandler.ts) | Decoding PNGs, the examples manifest, and live reload. |
+| [`src/document.ts`](src/document.ts) | The editable circuit. Owns the source pixels and undo history; a `Circuit` is compiled *from* it. |
+| [`src/editor.ts`](src/editor.ts) + [`src/tools/`](src/tools) | Drawing mode, the six tools, and pointer routing. |
+| [`src/stamps.ts`](src/stamps.ts) | The five 3×3 gate/crossover patterns, transcribed from the engine. |
+| [`src/png.ts`](src/png.ts) | Encoding a circuit back to a PNG, and saving it. |
 | [`src/ui.ts`](src/ui.ts) | Controls, input handling, frame loop. |
 | [`src/main.ts`](src/main.ts) | Entry point; the only module `index.html` loads. |
 
@@ -98,6 +106,9 @@ circuits would deadlock.
 | <kbd>Esc</kbd> | Settings panel |
 | <kbd>R</kbd> | Reset — reload the file, clear all wire states |
 | <kbd>F</kbd> | Fit the circuit to the window |
+| <kbd>E</kbd> | Toggle edit mode |
+| <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Undo / redo an edit |
+| <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save the circuit |
 | <kbd>+</kbd> <kbd>−</kbd> | Zoom |
 | Mouse wheel | Zoom at the cursor |
 | Middle drag | Pan |
@@ -114,6 +125,50 @@ output.
 
 Drop a PNG anywhere on the page to load it, or use **Open File** in the settings
 panel.
+
+## Drawing circuits
+
+Press <kbd>E</kbd> (or **✎ Edit**) and the left mouse button paints instead of
+driving wires. Everything else — pan, zoom, right-click to toggle a wire, every
+keyboard shortcut — behaves exactly as it does in simulate mode.
+
+| Tool | |
+| --- | --- |
+| ✏️ Pencil | Paint wire in the active colour |
+| ╱ Line | A straight run, committed on release |
+| ◻ Eraser | Paint insulation |
+| ⌖ Picker | Adopt an existing wire's colour |
+| ▷ Gate | Stamp an inverter — pick the direction with the arrows |
+| ✛ Crossover | Stamp wires that cross without connecting |
+
+The gate stamp is the reason this is easier than a paint program: it writes the
+exact corner pattern the engine looks for. Drawing a `+` by hand and filling the
+wrong two corners produces no error — just a pattern that is silently ignored.
+
+Edits go straight into the running circuit. Finish a stroke and the circuit is
+recompiled on the spot, keeping the state of every wire that still exists, so
+you can rewire something while it runs and watch it react. A pixel grid and a
+cursor outline appear once you are zoomed in far enough for them to help.
+
+<kbd>Ctrl</kbd>+<kbd>Z</kbd> and <kbd>Ctrl</kbd>+<kbd>Y</kbd> undo and redo, one
+stroke at a time.
+
+**Wire colour** is yours to choose, but at least one channel must be 224 or
+brighter — that is the engine's definition of a wire. Anything darker is
+rejected rather than quietly accepted, because wire that does not conduct looks
+identical to wire that does.
+
+### Saving
+
+<kbd>Ctrl</kbd>+<kbd>S</kbd> or **Save**. In Chrome and Edge, a circuit opened
+with **Open File** is written back to that PNG in place — the file on disk
+changes, and the app does not mistake its own write for an external edit.
+Everywhere else, and for the bundled examples (which are fetched over HTTP and
+have no file to write to), Save produces a download instead.
+
+A saved circuit reopens identically. On Safari individual colour channels can
+come back off by one on colour-rich schematics; wire detection is unaffected, so
+the circuit is the same.
 
 ## Settings
 

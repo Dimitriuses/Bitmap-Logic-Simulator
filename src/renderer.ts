@@ -3,6 +3,7 @@
 // The transforms are the ones from UMain.pas:470-478, kept in the same form so
 // pan/zoom feels identical to the desktop original.
 
+import { toCss, type Rgba } from './colors.js';
 import type { Circuit } from './simulator.js';
 
 /** A point in either canvas (CSS pixel) space or bitmap space. */
@@ -91,6 +92,23 @@ export class Viewport {
 /** The page background, also the colour behind the bitmap on the canvas. */
 const BACKDROP = '#0b0d11';
 
+/**
+ * Below this zoom a bitmap pixel is too small for grid lines to mean anything —
+ * they would swamp the pixel they are meant to delimit.
+ */
+const GRID_MIN_ZOOM = 8;
+
+/** What the editor asks the renderer to draw on top of the circuit. */
+export interface Overlay {
+  /** Pixels painted since the last compile, which the Circuit does not know about. */
+  readonly pending: ReadonlyMap<number, Rgba>;
+  /** What the active tool would write if committed now. */
+  readonly preview: ReadonlyMap<number, Rgba>;
+  /** Bitmap pixel under the pointer, or null. */
+  readonly hover: Point | null;
+  readonly showGrid: boolean;
+}
+
 function context2d(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
   const ctx = canvas.getContext('2d', { alpha: false });
   if (!ctx) throw new Error('Canvas 2D is not available in this browser.');
@@ -162,5 +180,99 @@ export class Renderer {
     // smoothing only while shrinking, where it stops thin wires disappearing.
     ctx.imageSmoothingEnabled = viewport.zoom < 1;
     ctx.drawImage(this.buffer, x, y, w, h);
+  }
+
+  /**
+   * Draw the editor's overlay on top of the circuit.
+   *
+   * Pending edits go here rather than into the circuit's frame buffer because
+   * render() rewrites every wire pixel from `states` each cycle, so a freshly
+   * erased wire would flicker back. Drawing to the visible canvas keeps the
+   * document → circuit derivation strictly one way.
+   */
+  drawOverlay(viewport: Viewport, overlay: Overlay): void {
+    const circuit = this.circuit;
+    if (!circuit) return;
+    const hasWork =
+      overlay.pending.size > 0 ||
+      overlay.preview.size > 0 ||
+      overlay.hover !== null ||
+      overlay.showGrid;
+    if (!hasWork) return; // costs nothing in simulate mode
+
+    const { ctx } = this;
+    const d = this.dpr;
+    const zoom = viewport.zoom;
+    const origin = viewport.toScreen(0, 0);
+    // Screen position of bitmap pixel (x, y), in device pixels.
+    const sx = (x: number) => (origin.x + x * zoom) * d;
+    const sy = (y: number) => (origin.y + y * zoom) * d;
+    const size = Math.max(zoom * d, 1);
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.save();
+    // Clip to the bitmap so overlay pixels never bleed past its edges.
+    ctx.beginPath();
+    ctx.rect(sx(0), sy(0), circuit.width * zoom * d, circuit.height * zoom * d);
+    ctx.clip();
+
+    const paint = (pixels: ReadonlyMap<number, Rgba>, alpha: number) => {
+      if (pixels.size === 0) return;
+      ctx.globalAlpha = alpha;
+      for (const [index, color] of pixels) {
+        const x = index % circuit.width;
+        const y = (index / circuit.width) | 0;
+        ctx.fillStyle = toCss(color);
+        ctx.fillRect(sx(x), sy(y), size, size);
+      }
+      ctx.globalAlpha = 1;
+    };
+
+    paint(overlay.pending, 1);
+    paint(overlay.preview, 0.55);
+
+    if (overlay.showGrid && zoom >= GRID_MIN_ZOOM) {
+      ctx.globalAlpha = 0.18;
+      ctx.strokeStyle = '#8b93a3';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      // Only the visible span, so a 2048-wide bitmap does not cost 2048 lines.
+      const left = Math.max(0, Math.floor(viewport.toWorld(0, 0).x));
+      const top = Math.max(0, Math.floor(viewport.toWorld(0, 0).y));
+      const right = Math.min(
+        circuit.width,
+        Math.ceil(viewport.toWorld(viewport.canvasWidth, viewport.canvasHeight).x) + 1
+      );
+      const bottom = Math.min(
+        circuit.height,
+        Math.ceil(viewport.toWorld(viewport.canvasWidth, viewport.canvasHeight).y) + 1
+      );
+      for (let x = left; x <= right; x++) {
+        ctx.moveTo(sx(x), sy(top));
+        ctx.lineTo(sx(x), sy(bottom));
+      }
+      for (let y = top; y <= bottom; y++) {
+        ctx.moveTo(sx(left), sy(y));
+        ctx.lineTo(sx(right), sy(y));
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    if (overlay.hover) {
+      // Outline the pixel the viewport transform actually resolves to. Deriving
+      // it from a canvas-pixel corner instead is off by one at high zoom,
+      // because tile boundaries land on fractional canvas coordinates.
+      ctx.strokeStyle = '#5ec8f2';
+      ctx.lineWidth = Math.max(1, d);
+      ctx.strokeRect(
+        sx(overlay.hover.x) + 0.5,
+        sy(overlay.hover.y) + 0.5,
+        Math.max(size - 1, 1),
+        Math.max(size - 1, 1)
+      );
+    }
+
+    ctx.restore();
   }
 }

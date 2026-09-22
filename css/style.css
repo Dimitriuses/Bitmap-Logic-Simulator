@@ -408,3 +408,101 @@ kbd {
     max-width: none;
   }
 }
+
+/* ---------------------------------------------------------------- editor */
+
+/* In edit mode the left button paints instead of driving a wire, so the cursor
+   has to say so — it is the only cue that a click means something different. */
+#view.editing {
+  cursor: cell;
+}
+
+#toolbar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 24px);
+  padding: 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  box-shadow: 0 6px 22px rgb(0 0 0 / 45%);
+  z-index: 3;
+}
+
+#toolbar[hidden] {
+  display: none;
+}
+
+.tool-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 8px;
+  border-right: 1px solid var(--panel-edge);
+}
+
+.tool-group:last-child {
+  padding-right: 0;
+  border-right: none;
+}
+
+#toolbar button {
+  min-width: 34px;
+  padding: 6px 8px;
+  font-size: 14px;
+  line-height: 1.1;
+}
+
+/* The selected tool and direction need to be obvious at a glance — picking the
+   wrong gate direction produces a pattern the engine silently ignores. */
+#toolbar button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+#toolbar input[type='color'] {
+  width: 34px;
+  height: 32px;
+  padding: 2px;
+  background: #1e2430;
+  border: 1px solid var(--panel-edge);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#mode-toggle[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+#dirty-flag {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+#dirty-flag[hidden] {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  #toolbar {
+    top: 8px;
+    gap: 6px;
+    padding: 5px;
+  }
+
+  #toolbar button {
+    min-width: 30px;
+    padding: 6px;
+  }
+}

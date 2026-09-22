@@ -9,6 +9,22 @@ Two things live here:
 1. **`BmpLogicSim150902/`** — the original Delphi/VCL Win32 desktop simulator ("Bitmap Logic Simulator") by Zoltán Hetesi. It is the **reference implementation** and the source of truth for simulation semantics. **It is untracked and gitignored**: it is someone else's program, it was purged from this repository's history, and it is never pushed. Every `BmpLogicSim150902/...` path below therefore resolves on this machine but *not* in a fresh clone — if it is missing, the folder has to be obtained separately, and nothing that needs it can be checked against the original until then.
 2. **`src/`** — the web port, in TypeScript, compiled by plain `tsc` to native ES modules in `dist/`. The site root *is* the repo root: `index.html`, `css/`, `dist/` and `projects/`. There is no bundler and no runtime dependency; `typescript` is the only devDependency.
 
+### The document layer
+
+Since the circuit editor ([specs/001-circuit-editor/](specs/001-circuit-editor/)), a decoded PNG no longer becomes a `Circuit` directly. The derivation is one way and it matters:
+
+```
+FileSource ──decode──▶ CircuitDocument ──compile──▶ Circuit ──render──▶ Renderer
+                        (mutable pixels,             (readonly,
+                         undo history, dirty)         simulatable)
+```
+
+- [src/document.ts](src/document.ts) owns the **source** pixels. Drawing tools mutate it; `compile(prevRender)` produces a fresh `Circuit`, carrying wire state across exactly as live reload does. Nothing compiled ever writes back.
+- [src/simulator.ts](src/simulator.ts) is **unchanged and stays that way**. If a change seems to require editing it, the design is wrong. Everything below about the engine still holds verbatim.
+- One recompile per completed stroke, never per pointer event — a rebuild is ~190 ms on Enigma2. Pixels painted mid-stroke are shown by the renderer's overlay ([src/renderer.ts](src/renderer.ts) `drawOverlay`) until the rebuild lands.
+- **The most damaging mistake available in this codebase**: writing `Circuit.frame` anywhere near the document or the PNG encoder. `render()` masks inactive wires down with `& 0x7F`, so saving a frame would drop every unlit wire from 255 to 127 — below the 224 threshold — and silently destroy the circuit. [src/png.ts](src/png.ts) encodes `doc.pixels`, never the frame.
+- Gate patterns live in [src/stamps.ts](src/stamps.ts) as **literal 3×3 tables transcribed from `detectGates`**, deliberately not derived from a direction vector. A wrong corner is not an error; it is a pattern the engine ignores.
+
 The schematics live under [`projects/`](projects), grouped into folders (`CPU/`, `Calc/`, `Enigma_v1/`, `Enigma_v2/`, `External_Shemes/`, plus a few loose at the top). They are both test data and the contents of the app's Examples menu, which [scripts/gen-examples.mjs](scripts/gen-examples.mjs) generates into `dist/examples.json` at build time — there is no hand-maintained manifest and no second copy of the PNGs.
 
 An earlier layout kept the web app in `docs/` with its own `docs/examples/`. Both are gone; anything still referring to them (notably [.specify/spec.md](.specify/spec.md) and [.specify/plan.md](.specify/plan.md)) predates the move.
@@ -21,7 +37,11 @@ This directory **is** a git repository, pushed to `github.com/Dimitriuses/Bitmap
 
 Available locally: Python 3.13 and Node 22. The web port builds with `npm install && npm run build` (which runs `scripts/gen-examples.mjs`, then `tsc`) and is served with `npm run serve` — `python -m http.server` from the **repo root**, not a subfolder. HTTP is mandatory: a `file://` page cannot read pixels back out of an image. `npm run watch` recompiles on change, `npm run typecheck` is `tsc --noEmit`.
 
-There is no test framework. Verification is manual — load an example and confirm it simulates — but the engine can also be exercised headlessly: shim `globalThis.ImageData`, decode a PNG to raw RGBA (Pillow is installed), and import `dist/simulator.js` directly. Known-good oracles: `Flip Flop` = 20 gates, `Enigma2` = 11,515 gates, `Flash Memory 256x12` = 2048×2048 / 45,004 gates.
+There is no test framework, but there is a zero-dependency harness in [scripts/verify/](scripts/verify/). **`npm run verify`** compiles all 22 schematics and diffs them against `scripts/verify/baseline.json`, then checks that every gate stamp the editor can place is one the engine actually recognises (21 assertions, including the direction each gate carries signal). `npm run verify:baseline` re-records the baseline — only do that when a count is *supposed* to change.
+
+`scripts/verify/harness.mjs` shims `globalThis.ImageData` and builds bitmaps in memory; `decode.py` handles real PNGs via Pillow. `roundtrip.mjs <file.png>` prints any file's counts, which is how a saved circuit is checked against its original. Known-good oracles: `Flip Flop` = 27 wires / 20 gates, `Enigma2` = 11,515 gates, `Flash Memory 256x12` = 2048×2048 / 45,004 gates.
+
+Browser-level behaviour needs Playwright, which is deliberately **not** a dependency of this repo — install it outside the project and point it at `python -m http.server`.
 
 `BmpLogicSim.ini` sits next to the exe and is written on form destroy via `IniWrite([pSettings])`; it persists the last file path and the three timer/pass settings.
 

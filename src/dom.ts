@@ -16,6 +16,16 @@ export function queryDom() {
 
     examples: el<HTMLSelectElement>('examples'),
     play: el<HTMLButtonElement>('play'),
+    modeToggle: el<HTMLButtonElement>('mode-toggle'),
+
+    toolbar: el('toolbar'),
+    tools: [...document.querySelectorAll<HTMLButtonElement>('#toolbar .tool')],
+    directions: [...document.querySelectorAll<HTMLButtonElement>('#toolbar .dir')],
+    wireColor: el<HTMLInputElement>('wire-color'),
+    undo: el<HTMLButtonElement>('undo'),
+    redo: el<HTMLButtonElement>('redo'),
+    save: el<HTMLButtonElement>('save'),
+    dirtyFlag: el('dirty-flag'),
     settings: el('settings'),
     settingsToggle: el<HTMLButtonElement>('settings-toggle'),
     settingsClose: el<HTMLButtonElement>('settings-close'),

@@ -1,0 +1,112 @@
+{
+  "projects/34segments.png": {
+    "size": "800x600",
+    "wires": 180,
+    "gates": 456
+  },
+  "projects/CPU/4bitAdder.png": {
+    "size": "1024x1024",
+    "wires": 1461,
+    "gates": 2472
+  },
+  "projects/CPU/4bitCPU.png": {
+    "size": "1024x1024",
+    "wires": 1048,
+    "gates": 1582
+  },
+  "projects/CPU/ALU.png": {
+    "size": "1024x1024",
+    "wires": 596,
+    "gates": 934
+  },
+  "projects/CPU/Flash Memory 256x12.png": {
+    "size": "2048x2048",
+    "wires": 21193,
+    "gates": 45004
+  },
+  "projects/Calc/Digital_Led.png": {
+    "size": "1024x1024",
+    "wires": 1134,
+    "gates": 2760
+  },
+  "projects/Enigma_v1/Enigma.png": {
+    "size": "2000x1200",
+    "wires": 5855,
+    "gates": 10786
+  },
+  "projects/Enigma_v1/counter.png": {
+    "size": "1200x800",
+    "wires": 766,
+    "gates": 1497
+  },
+  "projects/Enigma_v1/mixer.png": {
+    "size": "800x600",
+    "wires": 277,
+    "gates": 260
+  },
+  "projects/Enigma_v1/prog1.png": {
+    "size": "1600x800",
+    "wires": 2949,
+    "gates": 5598
+  },
+  "projects/Enigma_v2/Enigma2.png": {
+    "size": "2000x1200",
+    "wires": 5112,
+    "gates": 11515
+  },
+  "projects/Enigma_v2/configurator.png": {
+    "size": "1000x1000",
+    "wires": 215,
+    "gates": 465
+  },
+  "projects/Enigma_v2/counter2.png": {
+    "size": "1024x1024",
+    "wires": 2490,
+    "gates": 4100
+  },
+  "projects/Enigma_v2/mixer2.png": {
+    "size": "1200x1000",
+    "wires": 1367,
+    "gates": 4719
+  },
+  "projects/Enigma_v2/prog2.png": {
+    "size": "1024x1024",
+    "wires": 1564,
+    "gates": 3331
+  },
+  "projects/External_Shemes/Flip Flop.png": {
+    "size": "45x27",
+    "wires": 27,
+    "gates": 20
+  },
+  "projects/External_Shemes/HOqUbyL.png": {
+    "size": "118x79",
+    "wires": 38,
+    "gates": 46
+  },
+  "projects/External_Shemes/Memory new.png": {
+    "size": "61x37",
+    "wires": 37,
+    "gates": 25
+  },
+  "projects/External_Shemes/Memory old.png": {
+    "size": "200x200",
+    "wires": 132,
+    "gates": 25
+  },
+  "projects/External_Shemes/reg.png": {
+    "size": "16x21",
+    "wires": 12,
+    "gates": 10
+  },
+  "projects/LookKeypad.png": {
+    "size": "1024x1024",
+    "wires": 566,
+    "gates": 962
+  },
+  "projects/multiplier.png": {
+    "size": "800x600",
+    "wires": 219,
+    "gates": 365
+  }
+}

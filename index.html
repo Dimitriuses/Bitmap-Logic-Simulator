@@ -25,6 +25,9 @@
         <select id="examples" aria-label="Example schematics">
           <option value="">Examples…</option>
         </select>
+        <button id="mode-toggle" type="button" aria-pressed="false" title="Toggle edit mode (E)">
+          ✎ Edit
+        </button>
         <button id="play" class="primary" type="button">⏸ Pause</button>
         <button id="settings-toggle" type="button" aria-expanded="false" aria-controls="settings">
           Settings
@@ -32,6 +35,37 @@
       </div>
 
       <div id="stage">
+        <div id="toolbar" hidden aria-label="Drawing tools">
+          <div class="tool-group" role="radiogroup" aria-label="Tool">
+            <button class="tool" data-tool="pencil" type="button" title="Pencil">✏️</button>
+            <button class="tool" data-tool="line" type="button" title="Line">╱</button>
+            <button class="tool" data-tool="eraser" type="button" title="Eraser">◻</button>
+            <button class="tool" data-tool="picker" type="button" title="Pick colour">⌖</button>
+            <button class="tool" data-tool="gate" type="button" title="Gate">▷</button>
+            <button class="tool" data-tool="crossover" type="button" title="Crossover">✛</button>
+          </div>
+
+          <div class="tool-group" role="radiogroup" aria-label="Gate direction">
+            <button class="dir" data-dir="up" type="button" title="Points up">↑</button>
+            <button class="dir" data-dir="down" type="button" title="Points down">↓</button>
+            <button class="dir" data-dir="left" type="button" title="Points left">←</button>
+            <button class="dir" data-dir="right" type="button" title="Points right">→</button>
+          </div>
+
+          <div class="tool-group">
+            <input id="wire-color" type="color" value="#ffffff" aria-label="Wire colour" />
+          </div>
+
+          <div class="tool-group">
+            <button id="undo" type="button" title="Undo (Ctrl+Z)" disabled>↶</button>
+            <button id="redo" type="button" title="Redo (Ctrl+Y)" disabled>↷</button>
+          </div>
+
+          <div class="tool-group">
+            <button id="save" class="primary" type="button" title="Save (Ctrl+S)">Save</button>
+          </div>
+        </div>
+
         <canvas id="view"></canvas>
         <div id="dropzone">Drop a PNG schematic</div>
         <div id="toast" role="status" aria-live="polite"></div>
@@ -88,6 +122,12 @@
                 <dd>Reset the circuit</dd>
                 <dt><kbd>F</kbd></dt>
                 <dd>Fit to window</dd>
+                <dt><kbd>E</kbd></dt>
+                <dd>Toggle edit mode</dd>
+                <dt><kbd>Ctrl</kbd>+<kbd>Z</kbd></dt>
+                <dd>Undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo</dd>
+                <dt><kbd>Ctrl</kbd>+<kbd>S</kbd></dt>
+                <dd>Save the circuit</dd>
                 <dt><kbd>+</kbd> <kbd>−</kbd></dt>
                 <dd>Zoom</dd>
                 <dt>Wheel</dt>
@@ -109,6 +149,7 @@
       </div>
 
       <div id="statusbar">
+        <span class="stat" id="dirty-flag" hidden>● unsaved</span>
         <span class="stat"><b id="stat-size">—</b> px</span>
         <span class="stat"><b id="stat-wires">—</b> wires</span>
         <span class="stat"><b id="stat-gates">—</b> gates</span>
