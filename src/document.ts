@@ -166,6 +166,37 @@ export class CircuitDocument {
     block.forEach((dx, dy, color) => this.set(x + dx, y + dy, color));
   }
 
+  /**
+   * A standalone ImageData of a rectangle, for compiling a sub-circuit.
+   *
+   * Read from `pixels` — the source — and never from `Circuit.frame`. The frame
+   * masks inactive wires to `& 0x7F`, which is below the 224 wire threshold, so
+   * cropping it would produce a circuit with most of its wiring missing. Same
+   * hazard as the PNG encoder, in a different place.
+   */
+  cropImage(rect: Rect): ImageData {
+    const out = new ImageData(rect.width, rect.height);
+    const src = this.pixels.data;
+    const dst = out.data;
+    for (let dy = 0; dy < rect.height; dy++) {
+      const sy = rect.y + dy;
+      for (let dx = 0; dx < rect.width; dx++) {
+        const sx = rect.x + dx;
+        const q = (dy * rect.width + dx) << 2;
+        if (sx < 0 || sy < 0 || sx >= this.width || sy >= this.height) {
+          dst[q + 3] = 255; // outside the bitmap reads as insulation
+          continue;
+        }
+        const p = (sy * this.width + sx) << 2;
+        dst[q] = src[p];
+        dst[q + 1] = src[p + 1];
+        dst[q + 2] = src[p + 2];
+        dst[q + 3] = 255;
+      }
+    }
+    return out;
+  }
+
   /** Fill a rectangle with insulation, inside the current stroke. */
   clearRect(rect: Rect): void {
     this.#requireStroke();

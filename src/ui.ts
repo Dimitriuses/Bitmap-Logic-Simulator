@@ -1,5 +1,7 @@
 // ui.ts — application shell: controls, input handling and the frame loop.
 
+import { AnalysisPanel } from './analysis-panel.js';
+import type { PixelBlock } from './block.js';
 import { fromHex, toCss, toHex, type Rgba } from './colors.js';
 import { queryDom, type Dom } from './dom.js';
 import { CircuitDocument } from './document.js';
@@ -64,6 +66,7 @@ class App {
 
   private doc: CircuitDocument | null = null;
   private circuit: Circuit | null = null;
+  private readonly analysis: AnalysisPanel;
   private source: FileSource | null = null;
   private examples: ExampleEntry[] = [];
 
@@ -115,6 +118,24 @@ class App {
     this.editor.tool = this.prefs.tool;
     this.editor.direction = this.prefs.direction;
     this.editor.setBusWidth(this.prefs.busWidth);
+
+    this.analysis = new AnalysisPanel(this.dom, {
+      doc: () => this.doc,
+      selection: () => this.editor.selection,
+      toast: (message, isError) => this.toast(message, isError),
+      offerPaste: (block: PixelBlock) => {
+        if (this.editor.mode !== 'edit') this.setMode('edit');
+        const centre = this.#viewCentre();
+        const placed = this.editor.clipboard.floatBlock(block, centre.x, centre.y);
+        this.dirty = true;
+        this.#applyEditorToInputs();
+        return placed;
+      },
+      // Analysis drives its own copy of the circuit, but a running simulation
+      // competing for the frame budget makes a long sweep crawl.
+      pause: () => this.togglePlay(false),
+      closeSettings: () => this.toggleSettings(false),
+    });
 
     this.#bindControls();
     this.#bindEditorControls();
@@ -225,6 +246,8 @@ class App {
     this.dirty = true;
     this.#showCircuitStats(circuit);
     this.#refreshEditorState();
+    // A displayed analysis now describes a circuit that no longer exists.
+    this.analysis.markStale();
   }
 
   #showCircuitInfo(source: FileSource, circuit: Circuit): void {
@@ -505,6 +528,7 @@ class App {
     dom.undo.disabled = !doc?.canUndo;
     dom.redo.disabled = !doc?.canRedo;
     dom.dirtyFlag.hidden = !doc?.dirty;
+    this.analysis.refreshAvailability();
   }
 
   private persistEditor(): void {
@@ -546,6 +570,8 @@ class App {
     const open = force ?? !panel.classList.contains('open');
     panel.classList.toggle('open', open);
     this.dom.settingsToggle.setAttribute('aria-expanded', String(open));
+    // The two panels slide in from the same edge and would overlap.
+    if (open) this.analysis.open(false);
   }
 
   togglePlay(force?: boolean): void {
@@ -905,6 +931,10 @@ class App {
       case 'toggleMode':
         this.setMode(this.editor.mode === 'edit' ? 'simulate' : 'edit');
         return false;
+      case 'analyse':
+        this.analysis.open(true);
+        void this.analysis.run();
+        return true;
       case 'reset':
         void this.reset();
         return false;

@@ -76,6 +76,10 @@
           </div>
 
           <div class="tool-group">
+            <button id="analyse" type="button" title="Analyse the selection (A)" disabled>🔬 Analyse</button>
+          </div>
+
+          <div class="tool-group">
             <button id="save" class="primary" type="button" title="Save (Ctrl+S)">Save</button>
           </div>
         </div>
@@ -91,6 +95,85 @@
         <canvas id="view"></canvas>
         <div id="dropzone">Drop a PNG schematic</div>
         <div id="toast" role="status" aria-live="polite"></div>
+
+        <aside id="analysis" aria-label="Circuit analysis">
+          <header>
+            <h2>Analysis</h2>
+            <button id="analysis-close" type="button" aria-label="Close analysis">×</button>
+          </header>
+
+          <p id="analysis-stale" class="banner warn" hidden>
+            The circuit has changed since this was measured. Analyse again.
+          </p>
+          <p id="analysis-status" class="banner" hidden></p>
+
+          <div class="group">
+            <h3>Selection</h3>
+            <div class="row">
+              <button id="analysis-run" class="primary" type="button" disabled>Analyse selection</button>
+              <button id="analysis-abort" type="button" hidden>Stop</button>
+            </div>
+            <div class="field">
+              <label>
+                <input id="analysis-oracle" type="checkbox" checked />
+                Check the simulator against the logic
+              </label>
+            </div>
+            <div class="field">
+              <label>
+                <input id="analysis-simplify" type="checkbox" checked />
+                Look for a smaller circuit
+              </label>
+            </div>
+            <progress id="analysis-progress" max="100" value="0" hidden></progress>
+          </div>
+
+          <div class="group" id="analysis-shape-group" hidden>
+            <h3>Shape</h3>
+            <p id="analysis-shape" class="hint"></p>
+            <ul id="analysis-notes" class="notes"></ul>
+          </div>
+
+          <div class="group" id="analysis-io-group" hidden>
+            <h3>Nets</h3>
+            <p class="hint">Click an output to stop treating it as one.</p>
+            <div id="analysis-inputs" class="netlist-chips"></div>
+            <div id="analysis-outputs" class="netlist-chips"></div>
+            <div id="analysis-cut" class="netlist-chips"></div>
+          </div>
+
+          <div class="group" id="analysis-table-group" hidden>
+            <h3>Truth table</h3>
+            <div id="analysis-table" class="table-scroll"></div>
+          </div>
+
+          <div class="group" id="analysis-oracle-group" hidden>
+            <h3>Simulator</h3>
+            <p id="analysis-verdict"></p>
+            <div id="analysis-discrepancies" class="table-scroll"></div>
+          </div>
+
+          <div class="group" id="analysis-simplify-group" hidden>
+            <h3>Simplification</h3>
+            <p id="analysis-cost" class="hint"></p>
+            <div id="analysis-expressions"></div>
+            <div class="row">
+              <button id="analysis-replace" type="button" disabled>Offer as a paste</button>
+            </div>
+          </div>
+
+          <div class="group">
+            <h3>Interchange</h3>
+            <div class="row">
+              <button id="analysis-export" type="button" disabled>Export netlist…</button>
+              <button id="analysis-import" type="button">Import netlist…</button>
+            </div>
+            <p class="hint">
+              An exported netlist was checked against the engine. An imported one was not — treat
+              anything derived from it as a suggestion to verify.
+            </p>
+          </div>
+        </aside>
 
         <aside id="settings" aria-label="Settings">
           <header>
@@ -153,6 +236,8 @@
                 <dd>Fit to window</dd>
                 <dt><kbd>E</kbd></dt>
                 <dd>Toggle edit mode</dd>
+                <dt><kbd>A</kbd></dt>
+                <dd>Analyse the selection</dd>
                 <dt><kbd>Ctrl</kbd>+<kbd>Z</kbd></dt>
                 <dd>Undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo</dd>
                 <dt><kbd>Ctrl</kbd>+<kbd>S</kbd></dt>

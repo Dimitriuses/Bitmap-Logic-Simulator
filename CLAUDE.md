@@ -36,6 +36,44 @@ FileSource ──decode──▶ CircuitDocument ──compile──▶ Circuit 
 - **Toolbar buttons must not keep focus.** Enter and Space are the HTML activation keys for `<button>`, so a focused toolbar button swallows exactly the keys the editor needs — measured. `mousedown` is `preventDefault`ed to stop focus-on-click while leaving Tab working.
 - **`#toolbar` scrolls horizontally, so it clips.** `overflow-x: auto` forces `overflow-y: auto`, which silently hid the palette popover entirely. Anything that must escape the toolbar's box has to be a sibling of it, not a child.
 
+### Circuit analysis ([specs/003-circuit-analysis/](specs/003-circuit-analysis/))
+
+- **`Circuit.wireAt` is the authority on connectivity, and it is never re-derived.**
+  [src/netlist.ts](src/netlist.ts) asks the engine which net a pixel belongs to rather than
+  running a second union-find. A private disagreement between analysis and simulation about
+  which pixels form one wire would have been the hardest failure here to notice, and this
+  makes it impossible rather than unlikely.
+- **The netlist self-checks against `gateCount` and refuses on mismatch.** Gates *are*
+  re-detected (the engine keeps its gate table private), so detection is checked against
+  `Circuit.gateCount` and returns `ok: false` naming both counts rather than a netlist. This
+  tool draws conclusions about the simulator; a netlist that quietly disagrees with the
+  engine would make those conclusions confidently wrong. `scripts/verify/netlist.mjs` proves
+  the check fires by handing extraction a deliberately corrupted image.
+- **A crop must come from `doc.pixels`, never `Circuit.frame`.** Same trap `CLAUDE.md` flags
+  for the PNG encoder, in a new place: `render()` masks inactive wires with `& 0x7F`, so a
+  crop of the frame analyses a circuit with most of its wiring missing.
+- **Results are "minimised", never "optimal".** [src/minimise.ts](src/minimise.ts) optimises
+  sum-of-products; the number shown is inverter cost ([src/cost.ts](src/cost.ts)). Different
+  objectives — reporting one while optimising the other and calling it optimal is a lie the
+  UI must not tell.
+- **Driving a gate-driven net does nothing.** `#gateInput` reads the *driving gate's* state
+  whenever a net has drivers, so `setStateAt` only works on inputs — which is also why manual
+  clicks only stick on input wires. Sequential state must be seeded via
+  `loadGateStatesFromWires` and then released, and **every** net must be seeded, not just the
+  cut ones: a two-inverter latch whose partner keeps the previous row's value starts
+  inconsistent and lands wherever the gate shuffle takes it.
+- **A latch has more than one valid rest state — that is what makes it a latch.** Comparing a
+  settled state against a single iterated fixed point measures `randomizePerm`, not the
+  circuit, and reports different "discrepancies" on every run. The only defensible test is
+  whether the settled state *is* a fixed point.
+- **Quiescence is a property of the whole selection.** Watching only the probed nets reports
+  "settled" while something else still oscillates, which produced rows resting in states that
+  satisfied no equation. [src/oracle.ts](src/oracle.ts) hashes the whole rendered frame.
+- **[src/layout.ts](src/layout.ts) is the only module that writes a circuit.** Everything else
+  is read-only analysis whose worst failure is a wrong report. So it compiles what it drew,
+  re-extracts it, and compares against the original truth table before anything is offered —
+  and the offer goes through the ordinary floating paste, so declining it costs nothing.
+
 The schematics live under [`projects/`](projects), grouped into folders (`CPU/`, `Calc/`, `Enigma_v1/`, `Enigma_v2/`, `External_Shemes/`, plus a few loose at the top). They are both test data and the contents of the app's Examples menu, which [scripts/gen-examples.mjs](scripts/gen-examples.mjs) generates into `dist/examples.json` at build time — there is no hand-maintained manifest and no second copy of the PNGs.
 
 An earlier layout kept the web app in `docs/` with its own `docs/examples/`. Both are gone; anything still referring to them (notably [.specify/spec.md](.specify/spec.md) and [.specify/plan.md](.specify/plan.md)) predates the move.
@@ -48,7 +86,7 @@ This directory **is** a git repository, pushed to `github.com/Dimitriuses/Bitmap
 
 Available locally: Python 3.13 and Node 22. The web port builds with `npm install && npm run build` (which runs `scripts/gen-examples.mjs`, then `tsc`) and is served with `npm run serve` — `python -m http.server` from the **repo root**, not a subfolder. HTTP is mandatory: a `file://` page cannot read pixels back out of an image. `npm run watch` recompiles on change, `npm run typecheck` is `tsc --noEmit`.
 
-There is no test framework, but there is a zero-dependency harness in [scripts/verify/](scripts/verify/). **`npm run verify`** runs five suites in order: the 22 schematics against `scripts/verify/baseline.json`; every gate stamp the editor can place (21 assertions, including which way each gate carries signal); connectivity and bus spacing (33, including 80 bus cases); block rotation and the behaviour of rotated gates (18); and the key-precedence table, exhaustively (13, covering 80 state/key combinations). `npm run verify:baseline` re-records the baseline — only do that when a count is *supposed* to change.
+There is no test framework, but there is a zero-dependency harness in [scripts/verify/](scripts/verify/). **`npm run verify`** runs twelve suites in order: the 22 schematics against `scripts/verify/baseline.json`; every gate stamp the editor can place (21 assertions, including which way each gate carries signal); connectivity and bus spacing (33, including 80 bus cases); block rotation and the behaviour of rotated gates (18); the key-precedence table, exhaustively (14, covering 48 state/key combinations); netlist extraction against every schematic plus a corrupted-detector refusal (80); expressions and truth tables (53); minimisation and inverter cost (34); feedback, state variables and a latch driven through the engine (34); the differential oracle, including a planted discrepancy and an oscillator that is never sampled (37); netlist JSON round-trips and malformed-input refusals (86); and layout, which lays out every non-constant function of 1–3 variables and compiles each one back (23). `npm run verify:baseline` re-records the baseline — only do that when a count is *supposed* to change.
 
 `scripts/verify/harness.mjs` shims `globalThis.ImageData` and builds bitmaps in memory; `decode.py` handles real PNGs via Pillow. `roundtrip.mjs <file.png>` prints any file's counts, which is how a saved circuit is checked against its original. Known-good oracles: `Flip Flop` = 27 wires / 20 gates, `Enigma2` = 11,515 gates, `Flash Memory 256x12` = 2048×2048 / 45,004 gates.
 

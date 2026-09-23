@@ -60,6 +60,14 @@ scripts/            build helpers
 | [`src/keymap.ts`](src/keymap.ts) | The one place a key decides what it means. |
 | [`src/palette.ts`](src/palette.ts) | The 16 default colours and any custom ones. |
 | [`src/png.ts`](src/png.ts) | Encoding a circuit back to a PNG, and saving it. |
+| [`src/netlist.ts`](src/netlist.ts) | What a selection contains, in engine terms. Refuses rather than disagree with the engine. |
+| [`src/boolean.ts`](src/boolean.ts) | Expressions and truth tables, derived from the netlist alone. |
+| [`src/oracle.ts`](src/oracle.ts) | Drives the real engine through every combination and diffs it against the logic. |
+| [`src/sequential.ts`](src/sequential.ts) | Feedback: strongly connected components, state variables, next-state functions. |
+| [`src/minimise.ts`](src/minimise.ts) + [`src/cost.ts`](src/cost.ts) | Quine–McCluskey, and what a circuit costs when the only gate is an inverter. |
+| [`src/layout.ts`](src/layout.ts) | Turns an expression back into pixels — and proves the pixels before offering them. |
+| [`src/netlist-json.ts`](src/netlist-json.ts) | Netlist interchange with the Python tool. |
+| [`src/analysis.ts`](src/analysis.ts) + [`src/analysis-panel.ts`](src/analysis-panel.ts) | Orchestration, and the panel that presents it. |
 | [`src/ui.ts`](src/ui.ts) | Controls, input handling, frame loop. |
 | [`src/main.ts`](src/main.ts) | Entry point; the only module `index.html` loads. |
 
@@ -221,6 +229,63 @@ have no file to write to), Save produces a download instead.
 A saved circuit reopens identically. On Safari individual colour channels can
 come back off by one on colour-rich schematics; wire detection is unaffected, so
 the circuit is the same.
+
+## Analysing a circuit
+
+Select a region with the selection tool and press <kbd>A</kbd>, or **🔬 Analyse**.
+The panel answers three questions about whatever is inside the selection.
+
+**What does this compute?** The selection is compiled on its own and its netlist
+extracted: which pixels form which nets, which gates drive what, which nets are
+inputs (no gate drives them), which are outputs (driven, and feeding nothing
+further), and which the selection boundary cut. From that comes a truth table —
+derived from the gates, with no simulation involved.
+
+Output detection is structural, so it only spots nets that feed nothing. If the
+net you care about also drives something else, click the ones you do not want in
+the **Nets** list and analyse again.
+
+**Does the simulator agree?** With *Check the simulator against the logic* on,
+every input combination is driven through the real engine and compared against
+the derived table. Agreement is reported explicitly — it is the likely answer and
+the reason to run the check at all. Rows that never settle are reported as
+non-convergent and show `?` rather than a value: a circuit that keeps changing
+has no steady-state answer, and inventing one would hide exactly what you were
+looking for. Rows that answer differently on two runs are reported as
+timing-dependent; the engine's ramp carries deliberate jitter, so that is a
+property of the circuit rather than a fault.
+
+**Could it be smaller?** Each output is minimised and costed in inverters, which
+is the unit that matters here — OR is free, because several gates driving one net
+*is* an OR. The result is labelled **minimised**, never optimal: the minimiser
+optimises sum-of-products while the number shown is inverter cost, and those are
+different objectives. Nothing is shown that was not checked against the original
+truth table first. **Offer as a paste** draws the minimised form, compiles it,
+re-analyses it, compares it against the original table, and only then hands it to
+the ordinary floating paste — so you position it, press <kbd>Enter</kbd> to
+commit as one undo step, or <kbd>Escape</kbd> to discard it for nothing.
+
+### Limits worth knowing
+
+- **16 inputs.** 2^16 rows is about twelve seconds; beyond that the refusal
+  arrives instead of the freeze, with the count, before any work starts. A long
+  sweep shows progress and can be stopped.
+- **Steady state only.** Each row settles the circuit and reads it at rest. A
+  fault that lives in *when* signals arrive rather than in what they compute is
+  not something this can see.
+- **Relative to the selection.** Nets cut by the boundary become free inputs and
+  are listed as cut, because the analysis is only true relative to where you drew
+  the box.
+- **Feedback is analysed separately.** A selection containing a loop is reported
+  as sequential, with state variables located on the canvas and a next-state
+  function for each, rather than being forced into a truth table.
+
+### Exchanging netlists
+
+**Export netlist** writes the selection in the same JSON shape the Python
+LogicShorter project uses, and **Import netlist** reads one back. An exported
+netlist was checked against the engine; an imported one was not, so treat
+anything derived from it as a suggestion to verify.
 
 ## Settings
 

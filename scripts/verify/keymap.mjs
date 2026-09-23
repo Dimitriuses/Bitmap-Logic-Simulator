@@ -38,6 +38,10 @@ function expected(key, ctx) {
   // Space always pauses. There is no apply key: the arrows move the pointer
   // itself, so a held mouse button is what makes them draw.
   if (key === ' ') return 'togglePause';
+  // Analysis is defined relative to a selection, so A is bound only when there
+  // is one -- and it must lose to Escape's selection/paste rows above, which
+  // is what puts it here rather than earlier.
+  if (key === 'a') return ctx.hasSelection ? 'analyse' : 'none';
   return 'none';
 }
 
@@ -46,7 +50,7 @@ const describe = (a) =>
 
 console.log('Precedence table (exhaustive)\n');
 
-const KEYS = [' ', 'Enter', 'Escape', 'Delete', 'ArrowLeft'];
+const KEYS = [' ', 'Enter', 'Escape', 'Delete', 'ArrowLeft', 'a'];
 let cases = 0;
 let mismatches = [];
 

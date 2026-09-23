@@ -42,6 +42,7 @@ export type InputAction =
   | { kind: 'togglePause' }
   | { kind: 'toggleSettings' }
   | { kind: 'toggleMode' }
+  | { kind: 'analyse' }
   | { kind: 'undo' }
   | { kind: 'redo' }
   | { kind: 'save' }
@@ -130,6 +131,11 @@ export function resolveKey(e: KeyEventLike, ctx: InputContext): InputAction {
     case 'e':
     case 'E':
       return typing ? null : { kind: 'toggleMode' };
+    // Only with a selection: analysis is defined relative to one, and a key
+    // that silently does nothing is worse than a key that is not bound.
+    case 'a':
+    case 'A':
+      return typing || !ctx.hasSelection ? null : { kind: 'analyse' };
     case 'r':
     case 'R':
       return typing ? null : { kind: 'reset' };

@@ -11,7 +11,7 @@
   },
   "projects/CPU/4bitCPU.png": {
     "size": "1024x1024",
-    "wires": 1048,
+    "wires": 1049,
     "gates": 1582
   },
   "projects/CPU/ALU.png": {

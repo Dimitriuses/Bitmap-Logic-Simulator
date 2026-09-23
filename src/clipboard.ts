@@ -87,6 +87,24 @@ export class EditorClipboard {
     return true;
   }
 
+  /**
+   * Float a block that did not come from the clipboard — a generated layout.
+   *
+   * It goes through the same floating-paste mechanism as everything else, so
+   * it is positioned, rotated, committed and undone identically, and cancelling
+   * it costs nothing. The held clipboard content is deliberately not replaced:
+   * offering a suggestion should not destroy what the user copied.
+   */
+  floatBlock(block: PixelBlock, centreX: number, centreY: number): boolean {
+    if (this.#floating) return false;
+    this.#floating = {
+      block,
+      x: Math.round(centreX - block.width / 2),
+      y: Math.round(centreY - block.height / 2),
+    };
+    return true;
+  }
+
   moveFloating(dx: number, dy: number): void {
     if (!this.#floating) return;
     this.#floating.x += dx;
