@@ -224,6 +224,64 @@ Strategy*.
   report "settled" while another part of the selection still oscillated. It is
   now judged from the whole rendered frame.
 
+  ### Follow-up: why it works on some runs and not others
+
+  The sweep above seeds every net into a consistent state before releasing it,
+  so it answers "does this hold and compute correctly" — **not** "does this
+  start correctly". The cold-start behaviour is invisible to it by design, and
+  that is where the intermittency lives. `scripts/verify/determinism.mjs`
+  compiles identical pixels 40 times, cold-starts each and compares:
+
+  | # | kind | distinct settled states / 40 | never settled |
+  |---|------|------------------------------|---------------|
+  | 1 | sequential | 4 | 0 |
+  | 2 | sequential | 2 | 0 |
+  | 3 | sequential | 2 | 0 |
+  | 4 | sequential | 2 | 0 |
+  | 5 | **combinational** | **1** | 0 |
+  | 6 | sequential | 32 | 30 |
+  | 7 | sequential | 31 | 31 |
+  | 8 | sequential | 40 | 30 |
+
+  The combinational circuit is perfectly reproducible, so the engine is not
+  the variable. Circuits #1–#4 settle reliably but into one of several states,
+  and the count of outcomes **exactly equals** the number of rest states their
+  equations permit — ordinary power-on indeterminacy in a latch with no reset.
+  Circuits #6, #7 and #8 mostly never settle at all.
+
+  `scripts/verify/ringing.mjs 8` localises #8: only **8 of its 180 nets** move
+  after the transient, inside a 10×12 box at **x 542–551, y 634–645**. The other
+  233 gates are quiet. `ring-structure.mjs` shows what is there: a loop of **six
+  inverters**, 279 → 82 → 83 → 192 → 191 → 190 → 279, with two further gates
+  feeding 279 and 192 through a wired-OR.
+
+  Six is **even**, so it is a latch, not a ring oscillator: its stable states are
+  the alternating patterns. `ring-isolate.mjs` confirms both halves of that:
+
+  - seeded into `101010` — held, quiet, **12/12**; seeded into `010101` — held,
+    quiet, **12/12**. The storage element is correct.
+  - cold-started, it rings in **9/12** runs, and still does when cut out into a
+    circuit of its own, so the oscillation is intrinsic and not driven in.
+
+  **Verdict: the logic is right; the power-on state is not determined.** A cold
+  start puts every net at 0, and `000000` is neither stable pattern — it is the
+  symmetric state, from which all six inverters flip together, forever. Only the
+  engine's analog jitter can break that tie, and whether it does within a
+  reasonable number of cycles depends on the gate evaluation order and jitter
+  table — both rolled from unseeded `Math.random()` in `buildPerm` and
+  `RandomTable`, **per `Circuit`**. A `Circuit` is built on load *and on every
+  recompile*, so in the editor the dice are re-thrown on every stroke.
+
+  This is faithful to `UMain.pas`, not a port defect: the jitter exists precisely
+  to break ties like this one. It is simply not reliable against a six-deep
+  symmetric ring.
+
+  The remedy is in the circuit, not the engine: the loop needs a path that puts
+  it into a defined state at startup. Note that both existing feeds reach it
+  through a wired-OR, so they can only force a net HIGH — there is a set and no
+  clear. **Not verified**: no modified circuit was built or tested, so that is a
+  direction, not a fix.
+
 - [X] T053 Verify Scenario 10 of `specs/003-circuit-analysis/quickstart.md`: `npm run verify` fully green, and the 001 and 002 browser suites still passing on Chrome, Edge, Firefox and WebKit.
 
   `npm run verify` is green: 12 suites, 22 schematics against the baseline plus
