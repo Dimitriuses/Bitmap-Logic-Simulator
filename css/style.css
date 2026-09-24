@@ -936,6 +936,51 @@ kbd {
   color: #f2705e;
 }
 
+.clock-line {
+  margin: 4px 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.clock-line.leading .clock-pick {
+  border-color: #e0b558;
+  color: #e0b558;
+}
+
+.clock-line.chosen .clock-pick {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.clock-pick {
+  cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.clock-why {
+  color: var(--ink-dim);
+}
+
+#analysis-clock-verdict {
+  margin: 8px 0 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+#analysis-clock-verdict.good {
+  color: #6fd08c;
+}
+
+#analysis-clock-verdict.bad {
+  color: #f2705e;
+}
+
+#analysis-clock-edges {
+  width: 56px;
+  margin-left: 4px;
+}
+
 #analysis .expr {
   margin: 4px 0;
   padding: 5px 8px;

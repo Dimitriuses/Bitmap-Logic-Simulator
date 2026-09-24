@@ -12,7 +12,7 @@
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "serve": "python -m http.server 8000",
     "start": "npm run build && npm run serve",
-    "verify": "node scripts/verify/counts.mjs && node scripts/verify/stamps.mjs && node scripts/verify/geometry.mjs && node scripts/verify/rotate.mjs && node scripts/verify/keymap.mjs && node scripts/verify/netlist.mjs && node scripts/verify/boolean.mjs && node scripts/verify/minimise.mjs && node scripts/verify/sequential.mjs && node scripts/verify/oracle.mjs && node scripts/verify/netlist-json.mjs && node scripts/verify/layout.mjs && node scripts/verify/gates.mjs && node scripts/verify/graph-layout.mjs && node scripts/verify/schematic.mjs && node scripts/verify/storage-elements.mjs && node scripts/verify/labels.mjs",
+    "verify": "node scripts/verify/counts.mjs && node scripts/verify/stamps.mjs && node scripts/verify/geometry.mjs && node scripts/verify/rotate.mjs && node scripts/verify/keymap.mjs && node scripts/verify/netlist.mjs && node scripts/verify/boolean.mjs && node scripts/verify/minimise.mjs && node scripts/verify/sequential.mjs && node scripts/verify/oracle.mjs && node scripts/verify/netlist-json.mjs && node scripts/verify/layout.mjs && node scripts/verify/gates.mjs && node scripts/verify/graph-layout.mjs && node scripts/verify/schematic.mjs && node scripts/verify/storage-elements.mjs && node scripts/verify/labels.mjs && node scripts/verify/clock.mjs",
     "verify:baseline": "node scripts/verify/counts.mjs --save"
   },
   "devDependencies": {

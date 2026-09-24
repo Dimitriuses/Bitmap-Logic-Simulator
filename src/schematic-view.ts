@@ -176,6 +176,15 @@ export class SchematicView {
       ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
       ctx.fillStyle = hot ? HOT : sym.kind === 'input' ? ACCENT : '#6fd08c';
       ctx.fill();
+      // The clock is ringed, so it is distinguishable from the other inputs
+      // without reading a label (CK-6).
+      if (sym.isClock) {
+        ctx.strokeStyle = FEEDBACK;
+        ctx.lineWidth = Math.max(1.5, 2 * zoom);
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, r + 3 * zoom, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       if (showLabels) {
         ctx.fillStyle = hot ? HOT : DIM;
         ctx.font = `${Math.max(9, 11 * zoom)}px ui-monospace, monospace`;

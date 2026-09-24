@@ -68,6 +68,12 @@ scripts/            build helpers
 | [`src/layout.ts`](src/layout.ts) | Turns an expression back into pixels — and proves the pixels before offering them. |
 | [`src/netlist-json.ts`](src/netlist-json.ts) | Netlist interchange with the Python tool. |
 | [`src/analysis.ts`](src/analysis.ts) + [`src/analysis-panel.ts`](src/analysis-panel.ts) | Orchestration, and the panel that presents it. |
+| [`src/gates.ts`](src/gates.ts) | Reads NAND/NOR/AND/OR/NOT out of a netlist of inverters, and verifies each symbol before offering it. |
+| [`src/graph-layout.ts`](src/graph-layout.ts) | Layered graph layout: break cycles, assign layers, reduce crossings. Deterministic by construction. |
+| [`src/schematic.ts`](src/schematic.ts) + [`src/schematic-view.ts`](src/schematic-view.ts) | The diagram model, and drawing it with its own camera. |
+| [`src/storage-elements.ts`](src/storage-elements.ts) | What remembers, and whether it starts from a known value. |
+| [`src/clock.ts`](src/clock.ts) | Clock candidates, from period and from fan-out; stepping by edge. |
+| [`src/labels.ts`](src/labels.ts) | Names anchored to pixels, with a sidecar file and a browser working copy. |
 | [`src/ui.ts`](src/ui.ts) | Controls, input handling, frame loop. |
 | [`src/main.ts`](src/main.ts) | Entry point; the only module `index.html` loads. |
 
@@ -254,6 +260,87 @@ selection  10×7 at 17,9–26,15
 ```
 
 A readout showing `—` refuses rather than copying the placeholder.
+
+## Analysis mode
+
+Press <kbd>A</kbd> or **🔬 Analyse** for a third mode alongside Simulate and Edit. It carries the
+selection tool and **nothing that can change the circuit** — no drawing, no copy, cut, delete or
+paste. That is the point: a place to explore a circuit that works, with no risk of altering it.
+The guarantee is exhaustive rather than careful: every combination of key, modifier and context
+is checked to produce no action that writes.
+
+<kbd>E</kbd> and <kbd>A</kbd> each toggle one mode against Simulate, so what a key does never
+depends on which mode you are already in. <kbd>Enter</kbd> analyses the selection — it is free to
+mean that here because a floating paste, the other claimant on Enter, cannot exist in this mode.
+
+### Seeing the circuit as a circuit
+
+Switch the stage from **Pixels** to **Schematic** and the selection is drawn as a diagram:
+one symbol per gate, wires as connections, inputs on one edge and outputs on the other, with
+feedback drawn dashed and amber so it cannot be mistaken for an ordinary wire. Pointing at the
+circuit highlights the matching part of the diagram.
+
+Two levels of detail:
+
+- **Gates** recognises NAND, NOR, AND, OR and NOT. This medium only has inverters, but a net
+  driven by several of them *is* a NAND — the wired-OR does the work — and three further rules
+  give the rest. Every recognised symbol is checked against the gates it replaces, on every
+  input combination, before it is drawn.
+- **Inverters** draws one symbol per gate with the wired-OR as a junction. It is the ground
+  truth to check against when a recognised symbol looks wrong.
+
+The diagram has no input-count limit, because it describes structure rather than behaviour: the
+4-bit CPU's 241-gate block draws as 129 symbols in a couple of milliseconds, a size at which
+truth tables must refuse.
+
+### Naming things
+
+Click any net in the **Nets** list to name it. The name then replaces its coordinates everywhere
+— the list, the diagram, expressions, truth tables and discrepancy reports.
+
+Names are bound to a **pixel**, not to a net id, because ids are assigned per compile and shift
+whenever you draw. If you later erase the pixel a name sits on, the name is reported as
+unresolved and **kept** — never deleted, and never quietly moved to a neighbouring net, which
+would leave a name that still looks right on the wrong wire.
+
+They are saved two ways: a **`<circuit>.labels.json` sidecar** you save and load deliberately,
+and a browser copy kept automatically so a forgotten save costs nothing. Note the app cannot
+drop the sidecar beside the `.png` on its own — a file handle has no access to its own folder —
+so saving offers a location once.
+
+### Memory, and whether it starts
+
+A feedback loop is not automatically memory. A **storage element** is a loop with more than one
+rest state; one that always settles is just a circuit with a loop in it. Elements sharing a
+control line are reported as a group, so four register bits read as a register rather than as
+four loose nets.
+
+Then the question the rest of the tooling cannot ask. **"Does it hold and compute correctly"
+and "does it start correctly" are different questions.** The simulator check seeds a consistent
+state before releasing the circuit, so a power-on that never resolves is invisible to it. The
+Memory section therefore cold-starts the selection **20 times** and reports where it lands:
+
+```
+n38@13,3   2 rest states · power-on state is UNDEFINED across 20 cold starts
+                            — it settled into 2 different states (1 ×13, 0 ×7)
+```
+
+A finding always names its sample size, because twenty starts is evidence and not proof. You
+will see circuits that pass every behavioural check and still fail this one — that is the
+point.
+
+### Clocks
+
+Candidates come from two signals, because each is blind to the other's case. **Behavioural**:
+run with the inputs held and find nets that free-run with a stable period — which is how a clock
+is actually built here, as a ring oscillator. **Structural**: free inputs that reach a lot of
+storage, which catches a clock you pulse by hand.
+
+Nothing is designated for you. Candidates are ranked with the reason each was chosen, and where
+the evidence cannot separate two of them they are shown as **tied** — a structural search cannot
+tell a clock from a reset, since both reach every bit. Pick one and **Step** advances the circuit
+edge by edge. If the same edge sequence gives different answers on two runs, that is reported
+instead of showing one of them.
 
 ## Analysing a circuit
 

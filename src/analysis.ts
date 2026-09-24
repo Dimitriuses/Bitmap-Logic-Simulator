@@ -20,6 +20,7 @@ import { extractNetlist, type NetId, type Netlist } from './netlist.js';
 import { sweep, sweepSequential, type Discrepancy, type SweepOptions } from './oracle.js';
 import { analyseSequential, isSequential, type SequentialModel } from './sequential.js';
 import { analyseStorage, type StorageReport } from './storage-elements.js';
+import { findClockCandidates, type ClockCandidate } from './clock.js';
 import { Circuit } from './simulator.js';
 
 export interface Simplification {
@@ -50,6 +51,10 @@ export interface AnalysisResult {
    * the way to the screen so that they cannot be read as one (FR-031).
    */
   readonly storage: StorageReport | null;
+  /** Ranked clock candidates, each with its evidence. Never auto-designated. */
+  readonly clocks: readonly ClockCandidate[];
+  /** The net the user designated, if any. */
+  readonly clock: number | null;
   readonly discrepancies: readonly Discrepancy[];
   readonly oracleRan: boolean;
   readonly nonConvergentRows: number;
@@ -72,6 +77,8 @@ export interface AnalysisRequest {
   readonly runOracle?: boolean;
   /** Cold-start the selection repeatedly to see whether its memory starts defined. */
   readonly runPowerOn?: boolean;
+  /** A net the user has designated as the clock; overrides any ranking. */
+  readonly clock?: number | null;
   readonly simplify?: boolean;
   readonly sweepOptions?: SweepOptions;
 }
@@ -127,6 +134,15 @@ export function analyse(req: AnalysisRequest): AnalysisOutcome {
         `${storage.settlingLoops} feedback loop(s) settle to a single state — loops, not memory.`
       );
     }
+
+    // Candidates, never a designation: the structural signal cannot tell a
+    // clock from a reset, so choosing one here would be a guess wearing a
+    // result's clothes.
+    const clocks = findClockCandidates(
+      netlist,
+      req.runPowerOn === false ? null : image,
+      storage.elements
+    );
     notes.push(
       `Feedback found: ${model.stateNets.length} state variable(s). Analysed as a ` +
         'sequential circuit.'
@@ -152,6 +168,7 @@ export function analyse(req: AnalysisRequest): AnalysisOutcome {
       result: {
         kind: 'sequential', rect, netlist, circuit, inputs, outputs,
         expressions: model.outputs, table: null, sequential: model, storage,
+        clocks, clock: req.clock ?? null,
         discrepancies, oracleRan: ran, nonConvergentRows: nonConvergent,
         timingDependentRows: 0, simplification: null, notes, stale: false,
       },
@@ -193,7 +210,8 @@ export function analyse(req: AnalysisRequest): AnalysisOutcome {
     ok: true,
     result: {
       kind: 'combinational', rect, netlist, circuit, inputs, outputs, expressions,
-      table, sequential: null, storage: null, discrepancies, oracleRan: ran,
+      table, sequential: null, storage: null, clocks: [], clock: null,
+      discrepancies, oracleRan: ran,
       nonConvergentRows: nonConvergent, timingDependentRows: timingDependent,
       simplification, notes, stale: false,
     },

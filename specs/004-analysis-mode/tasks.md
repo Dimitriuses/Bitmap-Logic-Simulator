@@ -270,28 +270,63 @@ resolution, so a name cannot appear in the net list but not in the truth table.
 **Independent Test**: designate a clock on a known clocked circuit and step it; the reported
 state sequence matches its intended behaviour.
 
-- [ ] T055 [P] [US5] Create `src/clock.ts` with behavioural detection: hold inputs steady, run past the transient, and find nets whose series repeats with a stable period (CK-1, CK-3).
-- [ ] T056 [US5] Add structural detection to `src/clock.ts`: free inputs ranked by how many storage elements they reach (CK-1; depends on T037).
-- [ ] T057 [US5] Combine both signals into a ranked candidate list in `src/clock.ts`, each carrying its evidence, with indistinguishable candidates presented at equal rank rather than ordered (CK-2, CK-4).
-- [ ] T058 [US5] Implement clock designation in `src/analysis.ts`, with the user's choice always overriding the ranking and nothing selected silently (CK-5, FR-033).
-- [ ] T059 [US5] Highlight the leading candidate among the inputs wherever inputs are listed or drawn, in `src/analysis-panel.ts` and `src/schematic-view.ts` (CK-6, FR-033d).
-- [ ] T060 [US5] Implement edge stepping in `src/oracle.ts` and `src/analysis.ts`: with a clock designated, produce a sequence of state transitions, N edges giving exactly N transitions (CK-7, FR-034).
-- [ ] T061 [US5] Report non-repeatability in `src/analysis-panel.ts` when identical edge sequences differ across runs, rather than presenting one run's result (CK-8, FR-035).
-- [ ] T062 [US5] Add the clock designation and stepping controls to `index.html`, `src/dom.ts` and `css/style.css`.
-- [ ] T063 [US5] Verify Scenarios 8 and 9 of [quickstart.md](./quickstart.md) via a new `scripts/verify/clock.mjs` plus a browser pass: a ring oscillator is found behaviourally with its period, a hand-pulsed input structurally, a clock and a reset with equal fan-out come back at equal rank, and stepping N edges gives N transitions (SC-008, SC-008a, SC-008b).
+- [X] T055 [P] [US5] Create `src/clock.ts` with behavioural detection: hold inputs steady, run past the transient, and find nets whose series repeats with a stable period (CK-1, CK-3).
+- [X] T056 [US5] Add structural detection to `src/clock.ts`: free inputs ranked by how many storage elements they reach (CK-1; depends on T037).
+- [X] T057 [US5] Combine both signals into a ranked candidate list in `src/clock.ts`, each carrying its evidence, with indistinguishable candidates presented at equal rank rather than ordered (CK-2, CK-4).
+- [X] T058 [US5] Implement clock designation in `src/analysis.ts`, with the user's choice always overriding the ranking and nothing selected silently (CK-5, FR-033).
+- [X] T059 [US5] Highlight the leading candidate among the inputs wherever inputs are listed or drawn, in `src/analysis-panel.ts` and `src/schematic-view.ts` (CK-6, FR-033d).
+- [X] T060 [US5] Implement edge stepping in `src/oracle.ts` and `src/analysis.ts`: with a clock designated, produce a sequence of state transitions, N edges giving exactly N transitions (CK-7, FR-034).
+- [X] T061 [US5] Report non-repeatability in `src/analysis-panel.ts` when identical edge sequences differ across runs, rather than presenting one run's result (CK-8, FR-035).
+- [X] T062 [US5] Add the clock designation and stepping controls to `index.html`, `src/dom.ts` and `css/style.css`.
+- [X] T063 [US5] Verify Scenarios 8 and 9 of [quickstart.md](./quickstart.md) via a new `scripts/verify/clock.mjs` plus a browser pass: a ring oscillator is found behaviourally with its period, a hand-pulsed input structurally, a clock and a reset with equal fan-out come back at equal rank, and stepping N edges gives N transitions (SC-008, SC-008a, SC-008b).
+
+---
+
+**Checkpoint**: `clock` 32/32 headless; 14–15 browser checks on all four browsers.
+
+**Both honest-limit contracts fired on a real circuit**, not only on a fixture:
+
+- **CK-4** — on `reg.png` the panel reports
+  `n13@1,1 (suggested) … is a free input reaching 1 storage element(s) — indistinguishable from
+  n17@1,5 on this evidence`. Two inputs, identical structural evidence, reported as tied rather
+  than ordered. That ordering would have read as a judgement the netlist cannot support, since
+  nothing in it separates a clock from a reset.
+- **CK-8** — stepping that circuit produces
+  `The same edge sequence produced different results on two runs … No sequence is shown.`
+  Consistent with Phase 5, which already found `reg.png`'s power-on state undefined: a circuit
+  that cannot start from a known state cannot produce a repeatable edge sequence either. Two
+  independent checks agreeing about the same circuit.
+
+**One test expectation of mine was wrong**: I asserted an alternating series had period 1. It is
+period 2 — period 1 would mean every sample equals the next, which is the definition of
+constant. The code was right; the expectation was corrected.
+
+**Stepping needs two mechanisms, not one.** A free input is *driven* and held at each level while
+the circuit settles. A generated clock — a ring oscillator — cannot be driven at all, because a
+gate-driven net is rewritten every cycle; there the circuit is run until the clock flips itself,
+and that is the edge. Conflating the two would have made one of them silently wrong.
 
 ---
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T064 [US2] Implement the hand-off to Edit mode in `src/analysis-panel.ts` and `src/ui.ts`: a replacement is offered in analysis mode but applied only after an explicit switch, through the existing paste mechanism (MO-10, FR-009).
-- [ ] T065 [P] Register the new suites in the `verify` script in `package.json`: `gates.mjs`, `graph-layout.mjs`, `schematic.mjs`, `storage-elements.mjs`, `labels.mjs`, `clock.mjs`.
-- [ ] T066 [P] Document analysis mode in `README.md`: the three modes, the schematic and its two levels, naming, storage and power-on, and clocks.
-- [ ] T067 [P] Update `CLAUDE.md`: that every driven net is already a NAND and recognition is algebra over the netlist rather than pixel matching; that absorption requires fan-out 1; that a storage element is a feedback group with more than one rest state; that power-on is sampled over 20 cold starts and worded as sampling; that a label anchors to a pixel and never to a net id; and that a file handle cannot write a sibling file.
-- [ ] T068 Verify Scenario 11 of [quickstart.md](./quickstart.md): a replacement offered in analysis mode commits as one undo step only after an explicit switch to edit mode (depends on T064).
-- [ ] T069 Verify Scenario 0 and Scenario 12 of [quickstart.md](./quickstart.md): `npm run verify` fully green with counts unchanged against the baseline, and all browser suites passing on Chromium, Edge, Firefox and WebKit.
-- [ ] T070 Re-check the constitution: `npm run build` and `npx tsc --noEmit` clean, `package.json` dependencies still empty, and `src/simulator.ts` untouched.
+- [X] T064 [US2] Implement the hand-off to Edit mode in `src/analysis-panel.ts` and `src/ui.ts`: a replacement is offered in analysis mode but applied only after an explicit switch, through the existing paste mechanism (MO-10, FR-009).
+- [X] T065 [P] Register the new suites in the `verify` script in `package.json`: `gates.mjs`, `graph-layout.mjs`, `schematic.mjs`, `storage-elements.mjs`, `labels.mjs`, `clock.mjs`.
+- [X] T066 [P] Document analysis mode in `README.md`: the three modes, the schematic and its two levels, naming, storage and power-on, and clocks.
+- [X] T067 [P] Update `CLAUDE.md`: that every driven net is already a NAND and recognition is algebra over the netlist rather than pixel matching; that absorption requires fan-out 1; that a storage element is a feedback group with more than one rest state; that power-on is sampled over 20 cold starts and worded as sampling; that a label anchors to a pixel and never to a net id; and that a file handle cannot write a sibling file.
+- [X] T068 Verify Scenario 11 of [quickstart.md](./quickstart.md): a replacement offered in analysis mode commits as one undo step only after an explicit switch to edit mode (depends on T064).
+- [X] T069 Verify Scenario 0 and Scenario 12 of [quickstart.md](./quickstart.md): `npm run verify` fully green with counts unchanged against the baseline, and all browser suites passing on Chromium, Edge, Firefox and WebKit.
+- [X] T070 Re-check the constitution: `npm run build` and `npx tsc --noEmit` clean, `package.json` dependencies still empty, and `src/simulator.ts` untouched.
 - [ ] T071 Verify Scenario 13 of [quickstart.md](./quickstart.md) by hand, once: find a named signal in a 200-gate schematic within 15 seconds, and record the result here (SC-004).
+
+  **Not done — and deliberately left open rather than ticked.** This is the one
+  success criterion that needs a person, not a harness: it measures whether a
+  schematic is *readable*, which nothing automated can judge. The checklist has
+  flagged it as such since the spec was written. Everything it depends on is in
+  place — the 241-gate block draws as 129 symbols, names replace coordinates on
+  the symbols, and the view has its own zoom and pan — so it is ready to be
+  measured whenever you want to spend the fifteen seconds.
+
 
 ---
 

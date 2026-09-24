@@ -86,6 +86,51 @@ FileSource ──decode──▶ CircuitDocument ──compile──▶ Circuit 
   re-extracts it, and compares against the original truth table before anything is offered —
   and the offer goes through the ordinary floating paste, so declining it costs nothing.
 
+### Analysis mode ([specs/004-analysis-mode/](specs/004-analysis-mode/))
+
+- **Every driven net is already a NAND.** For a net driven by gates with sources `s1..sk`,
+  `N = ¬s1 ∨ … ∨ ¬sk = ¬(s1 ∧ … ∧ sk)`. [src/gates.ts](src/gates.ts) recognises gates by that
+  algebra over the netlist, never by matching pixel patterns — a second, independent reading of
+  the pixels could disagree with the simulation, which is the same failure `wireAt` exists to
+  prevent. Three absorption rules give OR, AND and NOR.
+- **Absorption requires fan-out 1.** A net something else reads cannot be folded away: doing so
+  either duplicates a gate or drops a connection. Conservation — every gate drawn or absorbed
+  exactly once — is asserted before a recognition is returned, and it caught a real
+  double-count during implementation rather than after.
+- **A storage element is a feedback group with more than one rest state.** Feedback alone is not
+  memory; a loop that always settles is a loop. This is what lets a report say "four register
+  bits" rather than "19 state variables", and it is also the scaling trick: rest states are
+  enumerated **per group** (2^2 or 2^4), never across a selection (2^19).
+- **"Holds correctly" and "starts correctly" are different findings and must never collapse.**
+  `sweepSequential` seeds a consistent state before releasing the circuit, so it *cannot* see a
+  power-on that never resolves. [src/storage-elements.ts](src/storage-elements.ts) cold-starts
+  20 times instead, and every finding carries its sample size — "defined across 20 starts",
+  never "defined". `projects/CPU/4bitCPU.png` and `projects/External_Shemes/reg.png` both pass
+  the behavioural check and both fail this one.
+- **A label anchors to a pixel, never to a net id.** Ids are assigned per compile, so a name
+  bound to one silently lands on a different wire after a single stroke — a name that still
+  looks right. When the anchored pixel stops being wire the label is reported **unresolved**:
+  kept, never deleted, never reattached to whatever is nearest.
+- **A file handle cannot write a sibling file.** There is no `getParent()`, and `resolve()`
+  needs a directory handle, so the app cannot drop `x.labels.json` beside `x.png` by itself —
+  [src/fileHandler.ts](src/fileHandler.ts) `saveTextFile` offers a picker or a download. Nor
+  may labels go in PNG metadata: an ordinary open-modify-save by an image editor drops a text
+  chunk, which is exactly how circuits here are edited.
+- **A clock and a reset are structurally identical** — both reach every bit — so candidates the
+  evidence cannot separate are reported at **equal rank** rather than ordered.
+  [src/clock.ts](src/clock.ts) pairs that structural signal with a behavioural one, because a
+  ring oscillator is not an input and a hand-pulsed input never toggles while held.
+- **Stepping a clock needs two mechanisms.** A free input is driven and held; a generated clock
+  cannot be driven at all (a gate-driven net is rewritten every cycle), so the circuit is run
+  until it flips itself.
+- **Layout determinism is a constraint, not a hope.** No `Math.random`, every tie broken by node
+  id, every sort explicitly total — the crossing-reduction sweep is where this is lost silently.
+  Reversing a self-loop leaves a self-loop, so self-loops are excluded from layering and drawn
+  as a loop; a same-layer edge must not enter the dummy-insertion loop at all.
+- **`display: block` beats the `hidden` attribute.** Both stage canvases and the status bar
+  readouts need an explicit `[hidden] { display: none }`. And `fit()` on a hidden canvas
+  measures zero, so fitting is deferred until the view is actually shown.
+
 The schematics live under [`projects/`](projects), grouped into folders (`CPU/`, `Calc/`, `Enigma_v1/`, `Enigma_v2/`, `External_Shemes/`, plus a few loose at the top). They are both test data and the contents of the app's Examples menu, which [scripts/gen-examples.mjs](scripts/gen-examples.mjs) generates into `dist/examples.json` at build time — there is no hand-maintained manifest and no second copy of the PNGs.
 
 An earlier layout kept the web app in `docs/` with its own `docs/examples/`. Both are gone; anything still referring to them (notably [.specify/spec.md](.specify/spec.md) and [.specify/plan.md](.specify/plan.md)) predates the move.
@@ -98,7 +143,7 @@ This directory **is** a git repository, pushed to `github.com/Dimitriuses/Bitmap
 
 Available locally: Python 3.13 and Node 22. The web port builds with `npm install && npm run build` (which runs `scripts/gen-examples.mjs`, then `tsc`) and is served with `npm run serve` — `python -m http.server` from the **repo root**, not a subfolder. HTTP is mandatory: a `file://` page cannot read pixels back out of an image. `npm run watch` recompiles on change, `npm run typecheck` is `tsc --noEmit`.
 
-There is no test framework, but there is a zero-dependency harness in [scripts/verify/](scripts/verify/). **`npm run verify`** runs twelve suites in order: the 22 schematics against `scripts/verify/baseline.json`; every gate stamp the editor can place (21 assertions, including which way each gate carries signal); connectivity and bus spacing (33, including 80 bus cases); block rotation and the behaviour of rotated gates (18); the key-precedence table, exhaustively (14, covering 48 state/key combinations); netlist extraction against every schematic plus a corrupted-detector refusal (80); expressions and truth tables (53); minimisation and inverter cost (34); feedback, state variables and a latch driven through the engine (34); the differential oracle, including a planted discrepancy and an oscillator that is never sampled (37); netlist JSON round-trips and malformed-input refusals (86); and layout, which lays out every non-constant function of 1–3 variables and compiles each one back (23). `npm run verify:baseline` re-records the baseline — only do that when a count is *supposed* to change.
+There is no test framework, but there is a zero-dependency harness in [scripts/verify/](scripts/verify/). **`npm run verify`** runs seventeen suites in order: the 22 schematics against `scripts/verify/baseline.json`; every gate stamp the editor can place (21 assertions, including which way each gate carries signal); connectivity and bus spacing (33, including 80 bus cases); block rotation and the behaviour of rotated gates (18); the key-precedence table, exhaustively (29, covering 72 state/key combinations plus 816 analysis-mode combinations proving no key writes); netlist extraction against every schematic plus a corrupted-detector refusal (80); expressions and truth tables (53); minimisation and inverter cost (34); feedback, state variables and a latch driven through the engine (34); the differential oracle, including a planted discrepancy and an oscillator that is never sampled (37); netlist JSON round-trips and malformed-input refusals (86); layout, which lays out every non-constant function of 1–3 variables and compiles each one back (23); gate recognition, including conservation across all 22 schematics and a corrupted-rule refusal (30); graph layout, including byte-identical double layouts (38); the schematic's agreement with the netlist at both levels (51); storage elements and power-on, where one circuit passes the behavioural sweep and fails power-on in the same run (36); labels, including an erased anchor left unresolved (51); and clock candidates, including a clock and a reset returned at equal rank (32). `npm run verify:baseline` re-records the baseline — only do that when a count is *supposed* to change.
 
 `scripts/verify/harness.mjs` shims `globalThis.ImageData` and builds bitmaps in memory; `decode.py` handles real PNGs via Pillow. `roundtrip.mjs <file.png>` prints any file's counts, which is how a saved circuit is checked against its original. Known-good oracles: `Flip Flop` = 27 wires / 20 gates, `Enigma2` = 11,515 gates, `Flash Memory 256x12` = 2048×2048 / 45,004 gates.
 

@@ -40,6 +40,8 @@ export interface SchematicSymbol {
   /** Where to look on the circuit, in selection coordinates. */
   readonly probe: { readonly x: number; readonly y: number };
   readonly label: string;
+  /** True for the net offered as the clock. */
+  readonly isClock: boolean;
 }
 
 export interface SchematicEdge {
@@ -71,6 +73,11 @@ export interface SchematicOptions {
   readonly level?: SchematicLevel;
   /** Names a net, if the user has given it one. */
   readonly nameOf?: (net: NetId) => string | null;
+  /**
+   * The leading clock candidate, marked so it can be picked out among the
+   * inputs at a glance rather than read for (CK-6).
+   */
+  readonly clockNet?: NetId | null;
 }
 
 const ZERO_RECT: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -213,6 +220,7 @@ export function buildSchematic(
       layer: p.layer,
       probe: info ? { x: info.probe.x, y: info.probe.y } : { x: 0, y: 0 },
       label: labelFor(d.kind, d.net),
+      isClock: opts.clockNet != null && d.net === opts.clockNet,
     };
   });
 

@@ -191,6 +191,18 @@
             <div id="analysis-storage-list"></div>
           </div>
 
+          <div class="group" id="analysis-clock-group" hidden>
+            <h3>Clock</h3>
+            <p class="hint">Candidates, with the reason each was chosen. Nothing is designated for you.</p>
+            <div id="analysis-clock-list"></div>
+            <div class="row">
+              <label for="analysis-clock-edges">Edges <input id="analysis-clock-edges" type="number" min="1" max="64" step="1" value="8" /></label>
+              <button id="analysis-clock-step" type="button" disabled>Step</button>
+            </div>
+            <p id="analysis-clock-verdict"></p>
+            <div id="analysis-clock-table" class="table-scroll"></div>
+          </div>
+
           <div class="group" id="analysis-oracle-group" hidden>
             <h3>Simulator</h3>
             <p id="analysis-verdict"></p>

@@ -21,6 +21,7 @@ import { makeNamer, resolveLabels, type Label, type Resolution } from './labels.
 import { importNetlist, labelsFrom, toJsonText } from './netlist-json.js';
 import { sweep, sweepSequential, type Discrepancy } from './oracle.js';
 import { describePowerOn, type StorageElement, type StorageReport } from './storage-elements.js';
+import { describeCandidate, stepClock, tiedWith } from './clock.js';
 
 export interface PanelHost {
   doc(): CircuitDocument | null;
@@ -38,7 +39,12 @@ export interface PanelHost {
    * The panel does not build the diagram itself: a schematic is a view, and
    * views belong to the stage. This keeps one netlist behind both.
    */
-  showSchematic(netlist: Netlist, rect: Rect, nameOf: (n: NetId) => string | null): void;
+  showSchematic(
+    netlist: Netlist,
+    rect: Rect,
+    nameOf: (n: NetId) => string | null,
+    clockNet: NetId | null
+  ): void;
   /**
    * Every name the user has given, anchored in DOCUMENT coordinates.
    *
@@ -56,6 +62,8 @@ const SLICE = 256;
 
 export class AnalysisPanel {
   #result: AnalysisResult | null = null;
+  /** The net the user picked as the clock. Never chosen for them. */
+  #clock: NetId | null = null;
   #markedOutputs: NetId[] | null = null;
   #abort = false;
   #busy = false;
@@ -71,6 +79,7 @@ export class AnalysisPanel {
       void this.run();
     });
     dom.analysisPanelToggle.addEventListener('click', () => this.open());
+    dom.analysisClockStep.addEventListener('click', () => this.#stepClock());
     dom.analysisClose.addEventListener('click', () => this.open(false));
     dom.analysisRun.addEventListener('click', () => void this.run());
     dom.analysisAbort.addEventListener('click', () => {
@@ -139,6 +148,7 @@ export class AnalysisPanel {
       doc,
       rect,
       markedOutputs: this.#markedOutputs ?? undefined,
+      clock: this.#clock,
       runOracle: false,
       simplify: this.dom.analysisSimplify.checked,
       runPowerOn: this.dom.analysisPowerOn.checked,
@@ -158,7 +168,8 @@ export class AnalysisPanel {
     this.host.showSchematic(
       outcome.result.netlist,
       rect,
-      makeNamer(this.#resolve(outcome.result))
+      makeNamer(this.#resolve(outcome.result)),
+      this.#clock ?? outcome.result.clocks.find((c) => c.rank === 1)?.net ?? null
     );
     this.#render(outcome.result);
     this.#status('');
@@ -282,6 +293,7 @@ export class AnalysisPanel {
       dom.analysisOracleGroup,
       dom.analysisSimplifyGroup,
       dom.analysisStorageGroup,
+      dom.analysisClockGroup,
     ]) {
       group.hidden = true;
     }
@@ -377,6 +389,9 @@ export class AnalysisPanel {
     // --- memory
     this.#renderStorage(result.storage, name);
 
+    // --- clock
+    this.#renderClocks(result, name);
+
     // --- simplification
     this.#renderSimplification(result, name);
 
@@ -458,6 +473,125 @@ export class AnalysisPanel {
     verdict.textContent = describePowerOn(finding);
     row.appendChild(verdict);
     return row;
+  }
+
+  /**
+   * Clock candidates, ranked, each showing why.
+   *
+   * Candidates that share a rank are shown as tied rather than listed in an
+   * order that would imply a distinction the evidence does not make — the
+   * structural signal cannot tell a clock from a reset (CK-4).
+   */
+  #renderClocks(result: AnalysisResult, name: (n: NetId) => string): void {
+    const { dom } = this;
+    if (result.clocks.length === 0) {
+      dom.analysisClockGroup.hidden = true;
+      return;
+    }
+    dom.analysisClockGroup.hidden = false;
+
+    // Drop a designation that this analysis no longer offers.
+    if (this.#clock !== null && !result.clocks.some((c) => c.net === this.#clock)) {
+      this.#clock = null;
+    }
+
+    const list = document.createElement('div');
+    for (const candidate of result.clocks) {
+      const row = document.createElement('p');
+      row.className = 'clock-line';
+      if (candidate.net === this.#clock) row.classList.add('chosen');
+      // The leading candidate is marked so it can be picked out at a glance
+      // (CK-6), but the word "suggested" carries it too.
+      if (candidate.rank === 1) row.classList.add('leading');
+
+      const pick = document.createElement('button');
+      pick.type = 'button';
+      pick.className = 'chip clock-pick';
+      pick.textContent = name(candidate.net);
+      pick.title = 'Use this net as the clock';
+      pick.addEventListener('mousedown', (e) => e.preventDefault());
+      pick.addEventListener('click', () => {
+        this.#clock = this.#clock === candidate.net ? null : candidate.net;
+        if (this.#result) this.#render(this.#result);
+      });
+      row.appendChild(pick);
+
+      const why = document.createElement('span');
+      why.className = 'clock-why';
+      const tied = tiedWith(result.clocks, candidate.net);
+      why.textContent =
+        ` ${candidate.rank === 1 ? '(suggested) ' : ''}${describeCandidate(candidate)}` +
+        (tied.length > 0
+          ? ` — indistinguishable from ${tied.map((t) => name(t.net)).join(', ')} on this evidence`
+          : '');
+      row.appendChild(why);
+      list.appendChild(row);
+    }
+    dom.analysisClockList.replaceChildren(list);
+
+    dom.analysisClockStep.disabled = this.#clock === null;
+    dom.analysisClockVerdict.textContent =
+      this.#clock === null
+        ? 'Pick a candidate to step the circuit by its edges.'
+        : `Stepping by ${name(this.#clock)}.`;
+    dom.analysisClockVerdict.className = '';
+    dom.analysisClockTable.replaceChildren();
+  }
+
+  /** Advance the circuit edge by edge and show what the state did. */
+  #stepClock(): void {
+    const result = this.#result;
+    if (!result || this.#clock === null || !result.sequential) return;
+    const doc = this.host.doc();
+    if (!doc) return;
+
+    const name = nameFor(result.netlist, this.#resolve(result));
+    const edges = Math.max(1, Math.min(64, Number(this.dom.analysisClockEdges.value) || 8));
+    const stateNets = result.storage?.elements.flatMap((e) => e.stateNets) ?? [];
+    if (stateNets.length === 0) {
+      this.host.toast('Nothing with memory to step.', true);
+      return;
+    }
+
+    const image = doc.cropImage(result.rect);
+    const r = stepClock(image, result.netlist, this.#clock, stateNets, edges);
+
+    const verdict = this.dom.analysisClockVerdict;
+    if (!r.repeatable) {
+      // CK-8: the same edge sequence gave a different answer. Report it rather
+      // than presenting one run's result as the answer.
+      verdict.textContent =
+        'The same edge sequence produced different results on two runs, so this ' +
+        'circuit’s behaviour is not repeatable. No sequence is shown.';
+      verdict.className = 'bad';
+      this.dom.analysisClockTable.replaceChildren();
+      return;
+    }
+
+    verdict.textContent = `${r.transitions.length} edge(s), repeatable across two runs.`;
+    verdict.className = 'good';
+
+    const table = document.createElement('table');
+    const head = table.createTHead().insertRow();
+    for (const h of ['edge', 'clk', ...stateNets.map(name), 'changed']) {
+      const th = document.createElement('th');
+      th.textContent = h;
+      head.appendChild(th);
+    }
+    const body = table.createTBody();
+    for (const t of r.transitions) {
+      const row = body.insertRow();
+      row.insertCell().textContent = String(t.edge);
+      row.insertCell().textContent = t.clock ? '↑' : '↓';
+      for (const v of t.after) {
+        const cell = row.insertCell();
+        cell.className = 'out';
+        cell.textContent = t.settled ? (v ? '1' : '0') : '?';
+      }
+      row.insertCell().textContent = t.changed.length ? t.changed.map(name).join(' ') : '—';
+      if (!t.settled) row.className = 'nonConvergent';
+    }
+    this.dom.analysisClockTable.replaceChildren(table);
   }
 
   #renderSimplification(result: AnalysisResult, name: (n: NetId) => string): void {
@@ -678,9 +812,21 @@ export class AnalysisPanel {
       this.host.toast(`No replacement offered: ${out.reason}`, true);
       return;
     }
+    // MO-10 / FR-009: analysis mode never applies a replacement itself. Taking
+    // one leaves the read-only mode, and the user is told that before it
+    // happens rather than discovering it afterwards — the guarantee is only
+    // worth something if leaving it is deliberate.
+    const agreed = window.confirm(
+      `Place ${out.result.gateCount} gates as a replacement?\n\n` +
+        'This leaves Analysis mode and switches to Edit mode, where you position ' +
+        'it and press Enter to commit — or Escape to discard it for nothing.\n\n' +
+        'It has been compiled and checked against the original truth table.'
+    );
+    if (!agreed) return;
+
     if (this.host.offerPaste(out.result.block)) {
       this.host.toast(
-        `${out.result.gateCount} gates, verified against the original. ` +
+        `Edit mode: ${out.result.gateCount} gates, verified against the original. ` +
           'Position it and press Enter, or Escape to cancel.'
       );
     } else {

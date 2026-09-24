@@ -87,7 +87,12 @@ class App {
   private stageView: 'pixels' | 'schematic' = 'pixels';
   private schematicLevel: SchematicLevel = 'recognised';
   /** The netlist the current diagram was built from, for rebuilding on a level switch. */
-  private schematicSource: { netlist: Netlist; rect: Rect; nameOf: (n: number) => string | null } | null = null;
+  private schematicSource: {
+    netlist: Netlist;
+    rect: Rect;
+    nameOf: (n: number) => string | null;
+    clockNet: number | null;
+  } | null = null;
   /** True once the circuit changed under a displayed diagram. */
   private schematicStale = false;
   /** A new diagram waiting to be fitted once its canvas has a real size. */
@@ -175,8 +180,8 @@ class App {
       closeSettings: () => this.toggleSettings(false),
       // A completed analysis is what makes a schematic possible, so the panel
       // hands its netlist over rather than the stage re-deriving one.
-      showSchematic: (netlist: Netlist, rect: Rect, nameOf) =>
-        this.setSchematicSource(netlist, rect, nameOf),
+      showSchematic: (netlist: Netlist, rect: Rect, nameOf, clockNet) =>
+        this.setSchematicSource(netlist, rect, nameOf, clockNet),
       labels: () => this.labelStore.labels,
       rename: (anchor, name) => {
         this.labelStore.set(anchor, name);
@@ -617,9 +622,10 @@ class App {
   setSchematicSource(
     netlist: Netlist,
     rect: Rect,
-    nameOf: (n: number) => string | null = () => null
+    nameOf: (n: number) => string | null = () => null,
+    clockNet: number | null = null
   ): void {
-    this.schematicSource = { netlist, rect, nameOf };
+    this.schematicSource = { netlist, rect, nameOf, clockNet };
     this.schematicStale = false;
     this.#rebuildSchematic();
     this.dom.viewSchematic.disabled = this.schematicView.current === null;
@@ -635,6 +641,7 @@ class App {
     const built = buildSchematic(source.netlist, source.rect, {
       level: this.schematicLevel,
       nameOf: source.nameOf,
+      clockNet: source.clockNet,
     });
     if (!built.ok) {
       this.toast(`No diagram: ${built.reason}`, true);
