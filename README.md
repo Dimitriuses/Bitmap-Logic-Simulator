@@ -295,6 +295,10 @@ truth tables must refuse.
 
 ### Naming things
 
+**Point at any net in the list and its pixels light up on the circuit** — inputs, outputs and
+internal alike — so a name or an id can be found without hunting for a coordinate. The schematic
+lights the same net at the same time, and pointing at the canvas works the other way round.
+
 Click any net in the **Nets** list to name it. The name then replaces its coordinates everywhere
 — the list, the diagram, expressions, truth tables and discrepancy reports.
 

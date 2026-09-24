@@ -97,6 +97,14 @@ class App {
   private schematicStale = false;
   /** A new diagram waiting to be fitted once its canvas has a real size. */
   private schematicNeedsFit = false;
+  /**
+   * The net being pointed at in the net list or the schematic, and its pixels.
+   *
+   * Cached because finding a net's pixels means scanning the analysed region,
+   * and a hover would otherwise rescan on every frame for as long as the
+   * pointer rests on a chip.
+   */
+  private highlight: { net: number; pixels: ReadonlySet<number> } | null = null;
   private source: FileSource | null = null;
   private examples: ExampleEntry[] = [];
 
@@ -183,6 +191,8 @@ class App {
       showSchematic: (netlist: Netlist, rect: Rect, nameOf, clockNet) =>
         this.setSchematicSource(netlist, rect, nameOf, clockNet),
       labels: () => this.labelStore.labels,
+      highlightNet: (net: number | null, circuit: Circuit | null, origin: Point) =>
+        this.highlightNet(net, circuit, origin),
       rename: (anchor, name) => {
         this.labelStore.set(anchor, name);
         this.labelStore.saveLocal();
@@ -606,6 +616,7 @@ class App {
       this.analysis.open(false);
       // The schematic is analysis mode's view; the other modes act on pixels.
       this.setStageView('pixels');
+      this.highlightNet(null, null, { x: 0, y: 0 });
     }
     this.dirty = true;
 
@@ -657,6 +668,38 @@ class App {
     //
     // A level switch describes the same circuit, so its camera stays put.
     if (!keepCamera) this.schematicNeedsFit = true;
+    this.dirty = true;
+  }
+
+  /**
+   * Light up a net's pixels because it is being pointed at somewhere else.
+   *
+   * `circuit` is the analysed crop, whose net ids these are, and `origin` is
+   * where that crop sits in the document — net ids are per-compile, so a crop's
+   * ids mean nothing against the document's own circuit.
+   */
+  highlightNet(net: number | null, circuit: Circuit | null, origin: Point): void {
+    if (net === null || !circuit || !this.circuit) {
+      if (this.highlight !== null) {
+        this.highlight = null;
+        this.dirty = true;
+      }
+      return;
+    }
+    if (this.highlight?.net === net) return;
+
+    const width = this.circuit.width;
+    const pixels = new Set<number>();
+    for (let y = 0; y < circuit.height; y++) {
+      for (let x = 0; x < circuit.width; x++) {
+        if (circuit.wireAt(x, y) !== net) continue;
+        const dx = x + origin.x;
+        const dy = y + origin.y;
+        if (dx < 0 || dy < 0 || dx >= width || dy >= this.circuit.height) continue;
+        pixels.add(dy * width + dx);
+      }
+    }
+    this.highlight = { net, pixels };
     this.dirty = true;
   }
 
@@ -1258,7 +1301,10 @@ class App {
       if (this.stageView === 'schematic') {
         // Highlight whatever net the pointer is over in the circuit, so the
         // two representations point at each other (FR-018).
-        const net = this.hover ? circuit.wireAt(this.hover.x, this.hover.y) : 0;
+        const pointed = this.hover ? circuit.wireAt(this.hover.x, this.hover.y) : 0;
+        // Either source of a hover lights the same net, so pointing at a chip
+        // and pointing at the canvas do the same thing in both views.
+        const net = this.highlight?.net ?? pointed;
         this.schematicView.draw({
           nets: net ? new Set([net]) : undefined,
           stale: this.schematicStale,
@@ -1285,6 +1331,7 @@ class App {
       // The grid is a drawing aid, so it stays with drawing.
       showGrid: editing,
       selection: owns ? this.editor.selection : null,
+      highlight: this.highlight?.pixels ?? null,
       floating: editing ? this.editor.floating : null,
       cursor: owns && this.nudged ? this.hover : null,
     };

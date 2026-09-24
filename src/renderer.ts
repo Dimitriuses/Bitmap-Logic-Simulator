@@ -118,7 +118,19 @@ export interface Overlay {
    * this marker is the only thing telling the user where clicks will land.
    */
   readonly cursor?: Point | null;
+  /**
+   * Pixels of a net being pointed at somewhere else — the net list, or the
+   * schematic. Flat indices into the bitmap, as `pending` uses.
+   *
+   * A set rather than a map because every pixel is drawn in one colour: the
+   * question it answers is "which pixels are this net", not "what colour are
+   * they", and the net's own colours are still visible underneath.
+   */
+  readonly highlight?: ReadonlySet<number> | null;
 }
+
+/** The colour a highlighted net is washed with. Matches the schematic view. */
+const HIGHLIGHT = '#f2705e';
 
 function context2d(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
   const ctx = canvas.getContext('2d', { alpha: false });
@@ -211,7 +223,8 @@ export class Renderer {
       overlay.showGrid ||
       !!overlay.selection ||
       !!overlay.floating ||
-      !!overlay.cursor;
+      !!overlay.cursor ||
+      (overlay.highlight?.size ?? 0) > 0;
     if (!hasWork) return; // costs nothing in simulate mode
 
     const { ctx } = this;
@@ -244,6 +257,19 @@ export class Renderer {
 
     paint(overlay.pending, 1);
     paint(overlay.preview, 0.55);
+
+    // A net pointed at from elsewhere. Drawn over the rendered frame rather
+    // than replacing it, so the wire's own lit/unlit state still reads through.
+    if (overlay.highlight && overlay.highlight.size > 0) {
+      ctx.globalAlpha = 0.72;
+      ctx.fillStyle = HIGHLIGHT;
+      for (const index of overlay.highlight) {
+        const x = index % circuit.width;
+        const y = (index / circuit.width) | 0;
+        ctx.fillRect(sx(x), sy(y), size, size);
+      }
+      ctx.globalAlpha = 1;
+    }
 
     if (overlay.showGrid && zoom >= GRID_MIN_ZOOM) {
       ctx.globalAlpha = 0.18;

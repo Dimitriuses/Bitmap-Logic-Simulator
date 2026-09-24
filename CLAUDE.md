@@ -127,6 +127,10 @@ FileSource ──decode──▶ CircuitDocument ──compile──▶ Circuit 
   id, every sort explicitly total — the crossing-reduction sweep is where this is lost silently.
   Reversing a self-loop leaves a self-loop, so self-loops are excluded from layering and drawn
   as a loop; a same-layer edge must not enter the dummy-insertion loop at all.
+- **Highlighting a net from the panel needs the crop's circuit, not the document's.** Net ids
+  are per-compile, so `highlightNet` takes the analysed crop plus its origin and translates —
+  the same reason labels anchor to pixels. The pixel set is cached per net, because finding one
+  means scanning the region and a hover would otherwise rescan every frame.
 - **`display: block` beats the `hidden` attribute.** Both stage canvases and the status bar
   readouts need an explicit `[hidden] { display: none }`. And `fit()` on a hidden canvas
   measures zero, so fitting is deferred until the view is actually shown.

@@ -17,6 +17,7 @@ import type { CircuitDocument } from './document.js';
 import type { Dom } from './dom.js';
 import { layout } from './layout.js';
 import { netById, type NetId, type Netlist } from './netlist.js';
+import type { Circuit } from './simulator.js';
 import { makeNamer, resolveLabels, type Label, type Resolution } from './labels.js';
 import { importNetlist, labelsFrom, toJsonText } from './netlist-json.js';
 import { sweep, sweepSequential, type Discrepancy } from './oracle.js';
@@ -55,6 +56,13 @@ export interface PanelHost {
   labels(): readonly Label[];
   /** Name the net at this document pixel; an empty name clears it. */
   rename(anchor: { x: number; y: number }, name: string): void;
+  /**
+   * Light up a net's pixels on the circuit, because it is being pointed at in
+   * the panel. `circuit` is the analysed crop — its net ids mean nothing
+   * against the document's own compile — and `origin` is where that crop sits.
+   * Pass null to clear.
+   */
+  highlightNet(net: NetId | null, circuit: Circuit | null, origin: { x: number; y: number }): void;
 }
 
 /** Rows swept between yields to the browser. */
@@ -303,6 +311,9 @@ export class AnalysisPanel {
 
   #render(result: AnalysisResult): void {
     const { dom } = this;
+    // The chips are about to be replaced; a highlight owned by one of them
+    // would otherwise outlive the element that set it.
+    this.host.highlightNet(null, null, { x: 0, y: 0 });
     const resolution = this.#resolve(result);
     const name = nameFor(result.netlist, resolution);
 
@@ -739,6 +750,15 @@ export class AnalysisPanel {
     const anchor = info
       ? { x: info.probe.x + result.rect.x, y: info.probe.y + result.rect.y }
       : null;
+
+    // Pointing at a net here lights its pixels on the circuit, so a name in a
+    // list can be found on the canvas without hunting for a coordinate.
+    c.addEventListener('mouseenter', () =>
+      this.host.highlightNet(id, result.circuit, { x: result.rect.x, y: result.rect.y })
+    );
+    c.addEventListener('mouseleave', () =>
+      this.host.highlightNet(null, null, { x: 0, y: 0 })
+    );
 
     if (anchor) {
       c.title = `Click to name this net · pixel ${anchor.x},${anchor.y}`;
