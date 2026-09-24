@@ -19,6 +19,7 @@ import { minimise, mintermsOf } from './minimise.js';
 import { extractNetlist, type NetId, type Netlist } from './netlist.js';
 import { sweep, sweepSequential, type Discrepancy, type SweepOptions } from './oracle.js';
 import { analyseSequential, isSequential, type SequentialModel } from './sequential.js';
+import { analyseStorage, type StorageReport } from './storage-elements.js';
 import { Circuit } from './simulator.js';
 
 export interface Simplification {
@@ -40,6 +41,15 @@ export interface AnalysisResult {
   readonly expressions: ReadonlyMap<NetId, BooleanExpr>;
   readonly table: TruthTable | null;
   readonly sequential: SequentialModel | null;
+  /**
+   * Storage, and whether it starts from a known value.
+   *
+   * Deliberately separate from `discrepancies`. Those answer "does it hold and
+   * compute correctly once started"; this answers "does it start correctly".
+   * A pass on one says nothing about the other, and the two are kept apart all
+   * the way to the screen so that they cannot be read as one (FR-031).
+   */
+  readonly storage: StorageReport | null;
   readonly discrepancies: readonly Discrepancy[];
   readonly oracleRan: boolean;
   readonly nonConvergentRows: number;
@@ -60,6 +70,8 @@ export interface AnalysisRequest {
   /** User-marked outputs; overrides the structural suggestion when present. */
   readonly markedOutputs?: readonly NetId[];
   readonly runOracle?: boolean;
+  /** Cold-start the selection repeatedly to see whether its memory starts defined. */
+  readonly runPowerOn?: boolean;
   readonly simplify?: boolean;
   readonly sweepOptions?: SweepOptions;
 }
@@ -103,6 +115,18 @@ export function analyse(req: AnalysisRequest): AnalysisOutcome {
 
   if (sequential) {
     const model = analyseSequential(netlist, outputs);
+    const storage = analyseStorage(netlist, req.runPowerOn === false ? null : image);
+    if (storage.elements.length > 0) {
+      notes.push(
+        `${storage.elements.length} storage element(s) in ` +
+          `${storage.groups.length} group(s).`
+      );
+    }
+    if (storage.settlingLoops > 0) {
+      notes.push(
+        `${storage.settlingLoops} feedback loop(s) settle to a single state — loops, not memory.`
+      );
+    }
     notes.push(
       `Feedback found: ${model.stateNets.length} state variable(s). Analysed as a ` +
         'sequential circuit.'
@@ -127,7 +151,7 @@ export function analyse(req: AnalysisRequest): AnalysisOutcome {
       ok: true,
       result: {
         kind: 'sequential', rect, netlist, circuit, inputs, outputs,
-        expressions: model.outputs, table: null, sequential: model,
+        expressions: model.outputs, table: null, sequential: model, storage,
         discrepancies, oracleRan: ran, nonConvergentRows: nonConvergent,
         timingDependentRows: 0, simplification: null, notes, stale: false,
       },
@@ -169,7 +193,7 @@ export function analyse(req: AnalysisRequest): AnalysisOutcome {
     ok: true,
     result: {
       kind: 'combinational', rect, netlist, circuit, inputs, outputs, expressions,
-      table, sequential: null, discrepancies, oracleRan: ran,
+      table, sequential: null, storage: null, discrepancies, oracleRan: ran,
       nonConvergentRows: nonConvergent, timingDependentRows: timingDependent,
       simplification, notes, stale: false,
     },

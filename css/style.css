@@ -907,6 +907,35 @@ kbd {
   font-style: italic;
 }
 
+.storage-group {
+  margin-bottom: 10px;
+  padding-left: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.storage-line {
+  margin: 3px 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.storage-rest {
+  color: var(--ink-dim);
+}
+
+/* Colour follows the finding, but the words carry it — never colour alone. */
+.storage-line .good {
+  color: #6fd08c;
+}
+
+.storage-line .warn {
+  color: #e0b558;
+}
+
+.storage-line .bad {
+  color: #f2705e;
+}
+
 #analysis .expr {
   margin: 4px 0;
   padding: 5px 8px;

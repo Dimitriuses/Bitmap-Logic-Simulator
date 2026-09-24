@@ -19,6 +19,7 @@ import { layout } from './layout.js';
 import { netById, type NetId, type Netlist } from './netlist.js';
 import { importNetlist, toJsonText } from './netlist-json.js';
 import { sweep, sweepSequential, type Discrepancy } from './oracle.js';
+import { describePowerOn, type StorageElement, type StorageReport } from './storage-elements.js';
 
 export interface PanelHost {
   doc(): CircuitDocument | null;
@@ -129,6 +130,7 @@ export class AnalysisPanel {
       markedOutputs: this.#markedOutputs ?? undefined,
       runOracle: false,
       simplify: this.dom.analysisSimplify.checked,
+      runPowerOn: this.dom.analysisPowerOn.checked,
     });
 
     if (!outcome.ok) {
@@ -262,6 +264,7 @@ export class AnalysisPanel {
       dom.analysisTableGroup,
       dom.analysisOracleGroup,
       dom.analysisSimplifyGroup,
+      dom.analysisStorageGroup,
     ]) {
       group.hidden = true;
     }
@@ -333,11 +336,90 @@ export class AnalysisPanel {
       dom.analysisTable.replaceChildren(list);
     }
 
+    // --- memory
+    this.#renderStorage(result.storage, name);
+
     // --- simplification
     this.#renderSimplification(result, name);
 
     dom.analysisExport.disabled = false;
     dom.analysisOracleGroup.hidden = true;
+  }
+
+  /**
+   * Storage, and whether it starts from a known value.
+   *
+   * Kept in its own section, above the simulator verdict, because the two
+   * answer different questions and a reader must not take a pass on one as a
+   * pass on the other. An undefined power-on state is stated as a fault, not
+   * mentioned in passing.
+   */
+  #renderStorage(report: StorageReport | null, name: (n: NetId) => string): void {
+    const { dom } = this;
+    if (!report || (report.elements.length === 0 && report.settlingLoops === 0)) {
+      dom.analysisStorageGroup.hidden = true;
+      return;
+    }
+    dom.analysisStorageGroup.hidden = false;
+
+    const parts: string[] = [];
+    if (report.elements.length > 0) {
+      parts.push(
+        `${report.elements.length} storage element(s) in ${report.groups.length} group(s).`
+      );
+    } else {
+      parts.push('No storage: every loop here settles to a single state.');
+    }
+    if (report.settlingLoops > 0) {
+      parts.push(`${report.settlingLoops} feedback loop(s) settle — loops, not memory.`);
+    }
+    dom.analysisStorageSummary.textContent = parts.join(' ');
+
+    const list = document.createElement('div');
+    report.groups.forEach((group, i) => {
+      const box = document.createElement('div');
+      box.className = 'storage-group';
+
+      const heading = document.createElement('p');
+      heading.className = 'expr';
+      heading.textContent =
+        group.elements.length > 1
+          ? `Group ${i + 1}: ${group.elements.length} bits sharing ` +
+            `${group.sharedControl.map(name).join(', ') || 'no control'}`
+          : `Group ${i + 1}: one element`;
+      box.appendChild(heading);
+
+      for (const element of group.elements) {
+        box.appendChild(this.#storageLine(element, name));
+      }
+      list.appendChild(box);
+    });
+    dom.analysisStorageList.replaceChildren(list);
+  }
+
+  #storageLine(element: StorageElement, name: (n: NetId) => string): HTMLElement {
+    const row = document.createElement('p');
+    row.className = 'storage-line';
+
+    const where = document.createElement('span');
+    where.className = 'chip';
+    where.textContent = element.stateNets.map(name).join(' ');
+    row.appendChild(where);
+
+    const rest = document.createElement('span');
+    rest.className = 'storage-rest';
+    rest.textContent = ` ${element.restStates.length} rest states · `;
+    row.appendChild(rest);
+
+    const finding = element.powerOn;
+    const verdict = document.createElement('span');
+    // Colour follows the finding, but the words carry it: a reader who cannot
+    // see the colour still gets the whole answer.
+    verdict.className =
+      !finding ? 'warn' : finding.kind === 'defined' ? 'good' : 'bad';
+    verdict.textContent = describePowerOn(finding);
+    row.appendChild(verdict);
+    return row;
   }
 
   #renderSimplification(result: AnalysisResult, name: (n: NetId) => string): void {
@@ -402,6 +484,16 @@ export class AnalysisPanel {
     if (discrepancies.length === 0 && nonConvergent === 0 && timingDependent === 0) {
       // Say it. An agreement that arrives as silence is not a result.
       parts.push('The simulator matches the logic on every row.');
+      // Say what this does not cover. The sweep seeds a consistent state before
+      // releasing the circuit, so it cannot see a power-on that never resolves
+      // — and reporting agreement without that caveat is how a circuit with an
+      // undefined start gets called healthy.
+      if (result.storage && result.storage.elements.length > 0) {
+        parts.push(
+          'That covers whether it holds and computes correctly once started, ' +
+            'not whether it starts from a known state — see Memory above.'
+        );
+      }
       dom.analysisVerdict.className = 'good';
     } else {
       if (discrepancies.length > 0) {

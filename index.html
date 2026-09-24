@@ -150,6 +150,12 @@
                 Look for a smaller circuit
               </label>
             </div>
+            <div class="field">
+              <label>
+                <input id="analysis-poweron" type="checkbox" checked />
+                Check whether memory starts from a known state
+              </label>
+            </div>
             <progress id="analysis-progress" max="100" value="0" hidden></progress>
           </div>
 
@@ -170,6 +176,12 @@
           <div class="group" id="analysis-table-group" hidden>
             <h3>Truth table</h3>
             <div id="analysis-table" class="table-scroll"></div>
+          </div>
+
+          <div class="group" id="analysis-storage-group" hidden>
+            <h3>Memory</h3>
+            <p id="analysis-storage-summary" class="hint"></p>
+            <div id="analysis-storage-list"></div>
           </div>
 
           <div class="group" id="analysis-oracle-group" hidden>

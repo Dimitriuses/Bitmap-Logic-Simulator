@@ -178,16 +178,40 @@ it needs neither the schematic nor labels. See *Implementation Strategy*.
 **Independent Test**: a latch is reported as one storage element with defined hold behaviour; the
 4-bit CPU's six-inverter loop is reported as storage whose power-on state is undefined.
 
-- [ ] T037 [P] [US4] Create `src/storage-elements.ts` identifying candidate groups from the non-trivial strongly connected components already computed by `src/sequential.ts`.
-- [ ] T038 [US4] Enumerate rest states **per group** in `src/storage-elements.ts` — `2^|state|` per group, never across the selection — and classify a group as storage only when it has more than one (ST-1, ST-2, ST-3).
-- [ ] T039 [US4] Report each element's holding nets and writing nets, and group elements that share control signals, in `src/storage-elements.ts` (ST-4, FR-032).
-- [ ] T040 [US4] Implement power-on sampling in `src/storage-elements.ts`: 20 cold starts using whole-frame quiescence, classified as `defined` only on unanimity, `undefined` with a distribution otherwise, and never-settling counted separately with no held value (PO-1, PO-2, PO-3).
-- [ ] T041 [US4] Carry the start count into every power-on finding in `src/storage-elements.ts`, so results read "defined across 20 starts" and never "defined" (PO-4, FR-029b).
-- [ ] T042 [US4] Keep "holds correctly" and "starts correctly" as separate findings in `src/analysis.ts`, so a pass on the existing sequential sweep cannot imply a pass on power-on (PO-5, FR-031).
-- [ ] T043 [US4] Present storage elements and power-on findings in `src/analysis-panel.ts`, stating an undefined power-on state plainly rather than as a footnote (FR-028).
-- [ ] T044 [US4] Verify Scenarios 6 and 7 of [quickstart.md](./quickstart.md) via a new `scripts/verify/storage-elements.mjs`: a latch is storage, a single-rest-state loop is not, a four-bit register reports as grouped bits, and **the 4-bit CPU's six-inverter loop reports an undefined power-on state across 20 starts while simultaneously passing the 003 behavioural sweep** (SC-007).
+- [X] T037 [P] [US4] Create `src/storage-elements.ts` identifying candidate groups from the non-trivial strongly connected components already computed by `src/sequential.ts`.
+- [X] T038 [US4] Enumerate rest states **per group** in `src/storage-elements.ts` — `2^|state|` per group, never across the selection — and classify a group as storage only when it has more than one (ST-1, ST-2, ST-3).
+- [X] T039 [US4] Report each element's holding nets and writing nets, and group elements that share control signals, in `src/storage-elements.ts` (ST-4, FR-032).
+- [X] T040 [US4] Implement power-on sampling in `src/storage-elements.ts`: 20 cold starts using whole-frame quiescence, classified as `defined` only on unanimity, `undefined` with a distribution otherwise, and never-settling counted separately with no held value (PO-1, PO-2, PO-3).
+- [X] T041 [US4] Carry the start count into every power-on finding in `src/storage-elements.ts`, so results read "defined across 20 starts" and never "defined" (PO-4, FR-029b).
+- [X] T042 [US4] Keep "holds correctly" and "starts correctly" as separate findings in `src/analysis.ts`, so a pass on the existing sequential sweep cannot imply a pass on power-on (PO-5, FR-031).
+- [X] T043 [US4] Present storage elements and power-on findings in `src/analysis-panel.ts`, stating an undefined power-on state plainly rather than as a footnote (FR-028).
+- [X] T044 [US4] Verify Scenarios 6 and 7 of [quickstart.md](./quickstart.md) via a new `scripts/verify/storage-elements.mjs`: a latch is storage, a single-rest-state loop is not, a four-bit register reports as grouped bits, and **the 4-bit CPU's six-inverter loop reports an undefined power-on state across 20 starts while simultaneously passing the 003 behavioural sweep** (SC-007).
 
 **Checkpoint**: the question that started this investigation is answerable in the app.
+`storage-elements` 36/36 headless; 12/12 browser checks on all four browsers.
+
+**The centrepiece works.** On the 4-bit CPU's six-inverter loop, in a single run:
+
+- the behavioural sweep from feature 003 reports **0 discrepancies, 0 non-convergent rows** —
+  it holds and computes correctly;
+- power-on reports it **never settled in 17 of 20 cold starts** — it does not start.
+
+Both findings are produced together and neither can be read as the other. That matches the
+9-in-12 figure measured by hand during the investigation, and it is the exact failure this
+feature was built to stop: a circuit that passes every check 003 can make, and is still broken.
+
+**The scaling claim, demonstrated**: the block's 19 feedback nets resolve into **12 storage
+elements of at most 2 state nets each, in 6 ms**. As one vector that is 2^19 = 524,288 rows;
+per group it is nothing. Analysing groups rather than selections is what makes a real register
+describable.
+
+**Also found**: `projects/External_Shemes/reg.png` — a circuit feature 003 reports as entirely
+healthy — likewise has an **undefined power-on state**, settling 1 ×13 / 0 ×7 across 20 starts.
+It was not looked for; the check simply reports it.
+
+**A wording requirement that earns its place**: the panel never shows a bare "defined". Every
+finding carries its sample size ("defined across 20 cold starts"), because 20 cold starts is
+evidence and not proof, and the browser suite asserts no line can say otherwise.
 
 ---
 
