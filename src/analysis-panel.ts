@@ -30,6 +30,13 @@ export interface PanelHost {
   pause(): void;
   /** Both panels occupy the same edge of the stage, so only one may be open. */
   closeSettings(): void;
+  /**
+   * Hand a finished analysis's netlist to the stage so it can be drawn.
+   *
+   * The panel does not build the diagram itself: a schematic is a view, and
+   * views belong to the stage. This keeps one netlist behind both.
+   */
+  showSchematic(netlist: Netlist, rect: Rect): void;
 }
 
 /** Rows swept between yields to the browser. */
@@ -133,6 +140,7 @@ export class AnalysisPanel {
     }
 
     this.#result = outcome.result;
+    this.host.showSchematic(outcome.result.netlist, rect);
     this.#render(outcome.result);
     this.#status('');
 

@@ -29,8 +29,8 @@ priorities — see *Implementation Strategy* for why US4 is built before US3.
 
 ## Phase 1: Setup
 
-- [ ] T001 Add analysis-mode fixtures to `scripts/verify/harness.mjs`: a two-inverter latch that settles to one state, a bistable six-inverter loop mirroring the 4-bit CPU's, a three-inverter ring oscillator, a NAND pair (two inverters into one net), an OR pattern (two NOT-nets into a NAND), a shared-fanout net that must NOT be absorbed, and a four-bit register sharing one write line — each returning the image plus probe coordinates.
-- [ ] T002 [P] Add a deterministic graph fixture builder to `scripts/verify/harness.mjs` that constructs `Netlist`-shaped objects directly, so layout and recognition can be tested without drawing pixels for every case.
+- [X] T001 Add analysis-mode fixtures to `scripts/verify/harness.mjs`: a two-inverter latch that settles to one state, a bistable six-inverter loop mirroring the 4-bit CPU's, a three-inverter ring oscillator, a NAND pair (two inverters into one net), an OR pattern (two NOT-nets into a NAND), a shared-fanout net that must NOT be absorbed, and a four-bit register sharing one write line — each returning the image plus probe coordinates.
+- [X] T002 [P] Add a deterministic graph fixture builder to `scripts/verify/harness.mjs` that constructs `Netlist`-shaped objects directly, so layout and recognition can be tested without drawing pixels for every case.
 
 ---
 
@@ -99,39 +99,72 @@ connections the netlist reports, and the same selection drawn twice is identical
 
 ### Recognition (pure)
 
-- [ ] T015 [P] [US2] Create `src/gates.ts` with the base rule: a net driven by gates with sources `s₁…sₖ` is `NAND(s₁…sₖ)`, with `NOT` as the k=1 case (GR-1).
-- [ ] T016 [US2] Add the three absorption rules to `src/gates.ts` — NAND of NOT-nets → OR, NOT of a NAND → AND, NOT of an OR → NOR — each requiring the absorbed net to have fan-out exactly 1 (GR-2, GR-3).
-- [ ] T017 [US2] Add the conservation invariant to `src/gates.ts`: every gate is drawn or absorbed exactly once, asserted before a recognition result is returned (GR-4).
-- [ ] T018 [US2] Add per-symbol verification to `src/gates.ts`: evaluate each recognised symbol against the expression of the gates it absorbed over all `2^|inputs|` combinations, and discard any symbol that disagrees in favour of faithful gates (GR-5).
-- [ ] T019 [US2] Verify Scenario 2 of [quickstart.md](./quickstart.md) via a new `scripts/verify/gates.mjs`: conservation holds on all 22 bundled schematics, each of R2/R3/R4 is exercised, a fan-out-2 net is not absorbed, and **a deliberately corrupted absorption rule is caught and rejected rather than drawn** (depends on T015–T018).
+- [X] T015 [P] [US2] Create `src/gates.ts` with the base rule: a net driven by gates with sources `s₁…sₖ` is `NAND(s₁…sₖ)`, with `NOT` as the k=1 case (GR-1).
+- [X] T016 [US2] Add the three absorption rules to `src/gates.ts` — NAND of NOT-nets → OR, NOT of a NAND → AND, NOT of an OR → NOR — each requiring the absorbed net to have fan-out exactly 1 (GR-2, GR-3).
+- [X] T017 [US2] Add the conservation invariant to `src/gates.ts`: every gate is drawn or absorbed exactly once, asserted before a recognition result is returned (GR-4).
+- [X] T018 [US2] Add per-symbol verification to `src/gates.ts`: evaluate each recognised symbol against the expression of the gates it absorbed over all `2^|inputs|` combinations, and discard any symbol that disagrees in favour of faithful gates (GR-5).
+- [X] T019 [US2] Verify Scenario 2 of [quickstart.md](./quickstart.md) via a new `scripts/verify/gates.mjs`: conservation holds on all 22 bundled schematics, each of R2/R3/R4 is exercised, a fan-out-2 net is not absorbed, and **a deliberately corrupted absorption rule is caught and rejected rather than drawn** (depends on T015–T018).
 
 ### Layout (pure)
 
-- [ ] T020 [P] [US2] Create `src/graph-layout.ts` with cycle breaking, reusing `feedbackNets()` from `src/sequential.ts` so that a reversed edge and a feedback edge are the same fact (GL-2), and assert acyclicity afterwards (GL-3).
-- [ ] T021 [US2] Add longest-path layer assignment to `src/graph-layout.ts`, placing inputs at layer 0 and outputs at the deepest layer (GL-4).
-- [ ] T022 [US2] Add dummy-node insertion to `src/graph-layout.ts` so every edge spans adjacent layers and long edges can bend.
-- [ ] T023 [US2] Add crossing reduction to `src/graph-layout.ts` by iterated median ordering, with explicitly stable sorts and every tie broken by node id (GL-5).
-- [ ] T024 [US2] Add coordinate assignment to `src/graph-layout.ts`: even spacing within a layer, then relaxation toward neighbour medians to straighten long runs.
-- [ ] T025 [US2] Verify Scenario 3 of [quickstart.md](./quickstart.md) via a new `scripts/verify/graph-layout.mjs`: acyclicity after breaking, correct layering, **byte-identical coordinates when the same graph is laid out twice**, and a 250-node graph inside the time budget (SC-002; depends on T020–T024).
+- [X] T020 [P] [US2] Create `src/graph-layout.ts` with cycle breaking, reusing `feedbackNets()` from `src/sequential.ts` so that a reversed edge and a feedback edge are the same fact (GL-2), and assert acyclicity afterwards (GL-3).
+- [X] T021 [US2] Add longest-path layer assignment to `src/graph-layout.ts`, placing inputs at layer 0 and outputs at the deepest layer (GL-4).
+- [X] T022 [US2] Add dummy-node insertion to `src/graph-layout.ts` so every edge spans adjacent layers and long edges can bend.
+- [X] T023 [US2] Add crossing reduction to `src/graph-layout.ts` by iterated median ordering, with explicitly stable sorts and every tie broken by node id (GL-5).
+- [X] T024 [US2] Add coordinate assignment to `src/graph-layout.ts`: even spacing within a layer, then relaxation toward neighbour medians to straighten long runs.
+- [X] T025 [US2] Verify Scenario 3 of [quickstart.md](./quickstart.md) via a new `scripts/verify/graph-layout.mjs`: acyclicity after breaking, correct layering, **byte-identical coordinates when the same graph is laid out twice**, and a 250-node graph inside the time budget (SC-002; depends on T020–T024).
 
 ### The model (pure)
 
-- [ ] T026 [US2] Create `src/schematic.ts` building a `Schematic` from a `Netlist` at both levels, with symbol and edge counts equal to the netlist's at faithful level (SM-1) and both levels from one analysis (SM-2).
-- [ ] T027 [US2] Carry the two-way pixel correspondence in `src/schematic.ts`: every symbol and edge can name its pixels, every net and gate can name its symbol (SM-3).
-- [ ] T028 [US2] Handle crossovers as crossing-not-joining and cut nets as entering from the selection boundary, in `src/schematic.ts` (SM-4, SM-5).
-- [ ] T029 [US2] Verify Scenario 4 of [quickstart.md](./quickstart.md) via a new `scripts/verify/schematic.mjs`: counts match the netlist on every bundled schematic, and the 241-gate block produces a diagram without refusing on size (SC-003, SC-009).
+- [X] T026 [US2] Create `src/schematic.ts` building a `Schematic` from a `Netlist` at both levels, with symbol and edge counts equal to the netlist's at faithful level (SM-1) and both levels from one analysis (SM-2).
+- [X] T027 [US2] Carry the two-way pixel correspondence in `src/schematic.ts`: every symbol and edge can name its pixels, every net and gate can name its symbol (SM-3).
+- [X] T028 [US2] Handle crossovers as crossing-not-joining and cut nets as entering from the selection boundary, in `src/schematic.ts` (SM-4, SM-5).
+- [X] T029 [US2] Verify Scenario 4 of [quickstart.md](./quickstart.md) via a new `scripts/verify/schematic.mjs`: counts match the netlist on every bundled schematic, and the 241-gate block produces a diagram without refusing on size (SC-003, SC-009).
 
 ### The stage (browser)
 
-- [ ] T030 [P] [US2] Create `src/schematic-view.ts` drawing a `Schematic` to canvas with its own `Viewport` instance, symbols per gate kind, and feedback edges visually distinguished (SV-1, FR-013).
-- [ ] T031 [US2] Add geometry hit testing to `src/schematic-view.ts` — against laid-out shapes, never pixels (SV-2).
-- [ ] T032 [P] [US2] Add the Pixels/Schematic view switch and the recognised/faithful level switch to `index.html`, `src/dom.ts` and `css/style.css` (FR-017).
-- [ ] T033 [US2] Wire the view switch in `src/ui.ts`, preserving each view's zoom and pan across switches (FR-017, SC-011; depends on T030, T032).
-- [ ] T034 [US2] Implement cross-highlighting in `src/ui.ts` and `src/renderer.ts`: pointing at a symbol highlights its pixels and the reverse (SV-3, FR-018).
-- [ ] T035 [US2] Mark a displayed schematic stale on any document change in `src/ui.ts` (SV-5, FR-037).
-- [ ] T036 [US2] Verify Scenario 5 of [quickstart.md](./quickstart.md) in the browser: a 250-gate selection draws inside 2 s, feedback is distinguishable, cameras survive the switch, the recognised view uses fewer symbols than the faithful one, and an edit marks it stale (SC-002, SC-005, SC-011, SC-003c).
+- [X] T030 [P] [US2] Create `src/schematic-view.ts` drawing a `Schematic` to canvas with its own `Viewport` instance, symbols per gate kind, and feedback edges visually distinguished (SV-1, FR-013).
+- [X] T031 [US2] Add geometry hit testing to `src/schematic-view.ts` — against laid-out shapes, never pixels (SV-2).
+- [X] T032 [P] [US2] Add the Pixels/Schematic view switch and the recognised/faithful level switch to `index.html`, `src/dom.ts` and `css/style.css` (FR-017).
+- [X] T033 [US2] Wire the view switch in `src/ui.ts`, preserving each view's zoom and pan across switches (FR-017, SC-011; depends on T030, T032).
+- [X] T034 [US2] Implement cross-highlighting in `src/ui.ts` and `src/renderer.ts`: pointing at a symbol highlights its pixels and the reverse (SV-3, FR-018).
+- [X] T035 [US2] Mark a displayed schematic stale on any document change in `src/ui.ts` (SV-5, FR-037).
+- [X] T036 [US2] Verify Scenario 5 of [quickstart.md](./quickstart.md) in the browser: a 250-gate selection draws inside 2 s, feedback is distinguishable, cameras survive the switch, the recognised view uses fewer symbols than the faithful one, and an edit marks it stale (SC-002, SC-005, SC-011, SC-003c).
 
-**Checkpoint**: a circuit can be read as a circuit.
+**Checkpoint**: a circuit can be read as a circuit. `gates` 30/30, `graph-layout` 38/38,
+`schematic` 51/51; 19/19 browser checks on Chromium, Edge, Firefox and WebKit.
+
+**Numbers worth keeping**: across all 22 bundled schematics, recognition accounts for **96,932
+gates** — every one exactly once — and draws them as **40,995 symbols** instead of 96,932. The
+4-bit CPU's 241-gate block becomes **129 symbols**, laid out in **2 ms**; a 250-node graph lays
+out in **7 ms** against a 2 s budget.
+
+**Five defects found while building this phase, all by the verification rather than by eye:**
+
+1. **Conservation caught double-counted gates.** Restoring a rejected fold un-hid nets the
+   ascending sweep had not yet reached, so they were emitted twice — once by the restore and
+   once when the sweep arrived. `recognise()` refused rather than returning a wrong diagram,
+   which is the check working; the fix was an explicit `emitted` set.
+2. **Reversing a self-loop leaves a self-loop.** `1 -> 1` reversed is `1 -> 1`, so cycle
+   breaking never terminated the graph. Self-loops are now excluded from layering and drawn as
+   a visible loop beside the node.
+3. **A same-layer edge spun the dummy-insertion loop forever** — `step` was computed as 1 when
+   `from` and `to` share a layer, so the loop never reached its end. It surfaced as
+   `RangeError: Map maximum size exceeded`.
+4. **The faithful view disagreed with its own contract.** It collapsed a net's k drivers into
+   one NAND, which is already a recognition step — FR-011a asks for one symbol per *engine
+   gate*, with the wired-OR drawn as a junction. The contract was right; the code was changed.
+   This is why the recognised/faithful ratio is now 40,995 vs 96,932 rather than 40,995 vs
+   44,355.
+5. **Two layout bugs in the browser.** `#analysis-toolbar` sat in normal flow where `#toolbar`
+   floats, pushing the canvas down; and the schematic canvas overlaid the whole stage,
+   swallowing toolbar clicks. Both now mirror their pixel-view counterparts. A third, related:
+   `display: block` beats the `hidden` attribute, so both canvases needed an explicit
+   `[hidden] { display: none }` — the same trap the status bar readouts hit.
+
+**One deferred-work note**: `fit()` needs the canvas's real size, and a hidden canvas measures
+zero — which placed the first diagram off screen at a 1x1-viewport zoom. Fitting is now
+deferred to the moment the view is actually shown.
 
 ---
 

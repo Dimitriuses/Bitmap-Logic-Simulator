@@ -303,3 +303,76 @@ export function settle(circuit, points, window = 12, maxCycles = 500) {
   }
   return { values, settled: false };
 }
+
+// --------------------------------------------------------------------------
+// Analysis-mode fixtures (004-analysis-mode)
+// --------------------------------------------------------------------------
+
+/**
+ * Build a Netlist-shaped object directly, without drawing pixels.
+ *
+ * Recognition and layout are pure functions of a netlist, so most of their
+ * cases do not need a bitmap at all -- and expressing them as graphs makes the
+ * case being tested legible instead of hidden in a pixel pattern.
+ *
+ * `gates` is a list of [srcNet, dstNet] pairs.
+ */
+export function netlistOf(gates, { inputs = [], outputs = [] } = {}) {
+  const ids = new Set();
+  for (const [a, b] of gates) {
+    ids.add(a);
+    ids.add(b);
+  }
+  for (const n of [...inputs, ...outputs]) ids.add(n);
+
+  const driven = new Set(gates.map(([, d]) => d));
+  const consumed = new Set(gates.map(([s]) => s));
+  const nets = [...ids]
+    .sort((a, b) => a - b)
+    .map((id) => ({
+      id,
+      probe: { x: id, y: 0 },
+      pixelCount: 1,
+      bounds: { x: id, y: 0, width: 1, height: 1 },
+    }));
+
+  return {
+    nets,
+    gates: gates.map(([src, dst]) => ({ src, dst, direction: 'right', at: { x: src, y: 0 } })),
+    inputs: inputs.length ? inputs : nets.filter((n) => !driven.has(n.id)).map((n) => n.id),
+    outputs: outputs.length
+      ? outputs
+      : nets.filter((n) => driven.has(n.id) && !consumed.has(n.id)).map((n) => n.id),
+    cut: [],
+  };
+}
+
+/** Two inverters into one net: a NAND of 1 and 2, out on 3. */
+export const NAND_PAIR = () => netlistOf([[1, 3], [2, 3]]);
+
+/** Two NOT-nets feeding a NAND: an OR of 1 and 2, out on 5. */
+export const OR_PATTERN = () => netlistOf([[1, 3], [2, 4], [3, 5], [4, 5]]);
+
+/** A NAND followed by an inverter: an AND of 1 and 2, out on 4. */
+export const AND_PATTERN = () => netlistOf([[1, 3], [2, 3], [3, 4]]);
+
+/** An OR followed by an inverter: a NOR of 1 and 2, out on 6. */
+export const NOR_PATTERN = () => netlistOf([[1, 3], [2, 4], [3, 5], [4, 5], [5, 6]]);
+
+/**
+ * The same OR shape, but net 3 is read twice. Its fan-out is 2, so it must NOT
+ * be absorbed -- folding it away would drop the second connection.
+ */
+export const SHARED_FANOUT = () => netlistOf([[1, 3], [2, 4], [3, 5], [4, 5], [3, 6]]);
+
+/** A four-bit register: four two-inverter loops sharing one write line. */
+export const REGISTER_4BIT = () => {
+  const gates = [];
+  for (let bit = 0; bit < 4; bit++) {
+    const a = 10 + bit * 2;
+    const b = 11 + bit * 2;
+    gates.push([a, b], [b, a]); // the storage loop
+    gates.push([1, a]);         // net 1 is the shared write line
+  }
+  return netlistOf(gates);
+};

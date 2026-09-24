@@ -41,6 +41,12 @@ export function queryDom() {
 
     analysisToggle: el<HTMLButtonElement>('analysis-toggle'),
     analysisToolbar: el('analysis-toolbar'),
+    schematicCanvas: el<HTMLCanvasElement>('schematic-view'),
+    viewPixels: el<HTMLButtonElement>('view-pixels'),
+    viewSchematic: el<HTMLButtonElement>('view-schematic'),
+    levelGroup: el('level-group'),
+    levelRecognised: el<HTMLButtonElement>('level-recognised'),
+    levelFaithful: el<HTMLButtonElement>('level-faithful'),
     analysisSelect: el<HTMLButtonElement>('analysis-select'),
     analysisRunToolbar: el<HTMLButtonElement>('analysis-run-toolbar'),
     analysisPanelToggle: el<HTMLButtonElement>('analysis-panel-toggle'),

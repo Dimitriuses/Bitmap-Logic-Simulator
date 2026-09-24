@@ -1,7 +1,9 @@
 // ui.ts — application shell: controls, input handling and the frame loop.
 
 import { AnalysisPanel } from './analysis-panel.js';
-import type { PixelBlock } from './block.js';
+import { buildSchematic, type SchematicLevel } from './schematic.js';
+import { SchematicView } from './schematic-view.js';
+import type { PixelBlock, Rect } from './block.js';
 import { fromHex, toCss, toHex, type Rgba } from './colors.js';
 import { copyText } from './copy.js';
 import { queryDom, type Dom } from './dom.js';
@@ -19,6 +21,7 @@ import {
   type ExampleEntry,
 } from './fileHandler.js';
 import { resolveKey, type InputAction } from './keymap.js';
+import type { Netlist } from './netlist.js';
 import { Palette } from './palette.js';
 import { saveDocument } from './png.js';
 import { Renderer, Viewport, type Overlay, type Point } from './renderer.js';
@@ -75,6 +78,16 @@ class App {
   private doc: CircuitDocument | null = null;
   private circuit: Circuit | null = null;
   private readonly analysis: AnalysisPanel;
+  private readonly schematicView: SchematicView;
+  /** Which of the two views the stage is showing, in analysis mode. */
+  private stageView: 'pixels' | 'schematic' = 'pixels';
+  private schematicLevel: SchematicLevel = 'recognised';
+  /** The netlist the current diagram was built from, for rebuilding on a level switch. */
+  private schematicSource: { netlist: Netlist; rect: Rect } | null = null;
+  /** True once the circuit changed under a displayed diagram. */
+  private schematicStale = false;
+  /** A new diagram waiting to be fitted once its canvas has a real size. */
+  private schematicNeedsFit = false;
   private source: FileSource | null = null;
   private examples: ExampleEntry[] = [];
 
@@ -126,6 +139,7 @@ class App {
   constructor() {
     this.dom = queryDom();
     this.renderer = new Renderer(this.dom.canvas);
+    this.schematicView = new SchematicView(this.dom.schematicCanvas);
     this.canvasRect = this.dom.canvas.getBoundingClientRect();
     this.cameraScheme = this.prefs.cameraScheme;
 
@@ -155,6 +169,9 @@ class App {
       // competing for the frame budget makes a long sweep crawl.
       pause: () => this.togglePlay(false),
       closeSettings: () => this.toggleSettings(false),
+      // A completed analysis is what makes a schematic possible, so the panel
+      // hands its netlist over rather than the stage re-deriving one.
+      showSchematic: (netlist: Netlist, rect: Rect) => this.setSchematicSource(netlist, rect),
     });
 
     this.#bindControls();
@@ -266,8 +283,10 @@ class App {
     this.dirty = true;
     this.#showCircuitStats(circuit);
     this.#refreshEditorState();
-    // A displayed analysis now describes a circuit that no longer exists.
+    // A displayed analysis now describes a circuit that no longer exists, and
+    // so does any diagram built from it.
     this.analysis.markStale();
+    this.schematicStale = true;
   }
 
   #showCircuitInfo(source: FileSource, circuit: Circuit): void {
@@ -414,6 +433,11 @@ class App {
 
     // Same rule as the editing toolbar and the status bar: Enter and Space are
     // the HTML activation keys for <button>, and analysis mode needs Enter.
+    dom.viewPixels.addEventListener('click', () => this.setStageView('pixels'));
+    dom.viewSchematic.addEventListener('click', () => this.setStageView('schematic'));
+    dom.levelRecognised.addEventListener('click', () => this.setSchematicLevel('recognised'));
+    dom.levelFaithful.addEventListener('click', () => this.setSchematicLevel('faithful'));
+
     dom.analysisToolbar.addEventListener('mousedown', (e) => {
       if ((e.target as HTMLElement | null)?.closest('button')) e.preventDefault();
     });
@@ -551,11 +575,81 @@ class App {
 
     // Leaving analysis closes its panel; the selection deliberately survives,
     // so a region chosen in one mode is still chosen in another (MO-4).
-    if (before === 'analysis' && mode !== 'analysis') this.analysis.open(false);
+    if (before === 'analysis' && mode !== 'analysis') {
+      this.analysis.open(false);
+      // The schematic is analysis mode's view; the other modes act on pixels.
+      this.setStageView('pixels');
+    }
     this.dirty = true;
 
     this.#applyEditorToInputs();
     this.persistEditor();
+  }
+
+  /**
+   * Take the netlist a finished analysis produced and build a diagram from it.
+   *
+   * Both levels come from this one call, so switching between them later is a
+   * rebuild from the same netlist rather than a re-analysis (SM-2).
+   */
+  setSchematicSource(netlist: Netlist, rect: Rect): void {
+    this.schematicSource = { netlist, rect };
+    this.schematicStale = false;
+    this.#rebuildSchematic();
+    this.dom.viewSchematic.disabled = this.schematicView.current === null;
+    this.#applyEditorToInputs();
+  }
+
+  #rebuildSchematic(): void {
+    const source = this.schematicSource;
+    if (!source) {
+      this.schematicView.setSchematic(null);
+      return;
+    }
+    const built = buildSchematic(source.netlist, source.rect, { level: this.schematicLevel });
+    if (!built.ok) {
+      this.toast(`No diagram: ${built.reason}`, true);
+      this.schematicView.setSchematic(null);
+      return;
+    }
+    const keepCamera = this.schematicView.current !== null;
+    this.schematicView.setSchematic(built.schematic);
+    // Fitting needs the canvas's real size, and the canvas may still be hidden
+    // — a hidden element measures 0, which makes `fit` compute a zoom against a
+    // 1x1 viewport and place the diagram somewhere off screen. So it is
+    // deferred to the moment the view is actually shown.
+    //
+    // A level switch describes the same circuit, so its camera stays put.
+    if (!keepCamera) this.schematicNeedsFit = true;
+    this.dirty = true;
+  }
+
+  setStageView(view: 'pixels' | 'schematic'): void {
+    if (view === 'schematic' && this.schematicView.current === null) return;
+    this.stageView = view;
+    const showing = view === 'schematic';
+    this.dom.schematicCanvas.hidden = !showing;
+    this.dom.canvas.hidden = showing;
+    this.dom.levelGroup.hidden = !showing;
+    this.dom.viewPixels.classList.toggle('active', !showing);
+    this.dom.viewSchematic.classList.toggle('active', showing);
+    if (showing) {
+      // Measure first: the canvas only has a size now that it is not hidden.
+      this.schematicView.resize();
+      if (this.schematicNeedsFit) {
+        this.schematicView.fit();
+        this.schematicNeedsFit = false;
+      }
+    }
+    this.dirty = true;
+  }
+
+  setSchematicLevel(level: SchematicLevel): void {
+    if (this.schematicLevel === level) return;
+    this.schematicLevel = level;
+    this.dom.levelRecognised.classList.toggle('active', level === 'recognised');
+    this.dom.levelFaithful.classList.toggle('active', level === 'faithful');
+    this.#rebuildSchematic();
   }
 
   /** E and A each toggle one mode against Simulate. */
@@ -1070,8 +1164,18 @@ class App {
         circuit.render();
         this.dirty = false;
       }
-      this.renderer.draw(this.viewport);
-      this.renderer.drawOverlay(this.viewport, this.#overlay());
+      if (this.stageView === 'schematic') {
+        // Highlight whatever net the pointer is over in the circuit, so the
+        // two representations point at each other (FR-018).
+        const net = this.hover ? circuit.wireAt(this.hover.x, this.hover.y) : 0;
+        this.schematicView.draw({
+          nets: net ? new Set([net]) : undefined,
+          stale: this.schematicStale,
+        });
+      } else {
+        this.renderer.draw(this.viewport);
+        this.renderer.drawOverlay(this.viewport, this.#overlay());
+      }
       this.#updateStats(circuit, now, cycles);
     }
 

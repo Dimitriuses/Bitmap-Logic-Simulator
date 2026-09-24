@@ -334,19 +334,27 @@ kbd {
  * Analysis mode                                                     *
  * ---------------------------------------------------------------- */
 
-/* Shares the editing toolbar's box so the stage does not shift when the mode
-   changes. Note it is a SIBLING of #toolbar, not a child: #toolbar scrolls
-   horizontally, which forces overflow-y and would clip anything inside it. */
+/* Mirrors #toolbar exactly: a floating bar over the canvas, not a block in
+   flow. In flow it would push the canvas down and change the stage's geometry
+   between modes. It is a SIBLING of #toolbar, not a child, because #toolbar
+   scrolls horizontally and would clip anything inside it. */
 #analysis-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 12px;
+  gap: 8px;
+  max-width: calc(100% - 24px);
+  padding: 6px;
   background: var(--panel);
-  border-bottom: 1px solid var(--panel-edge);
-  flex: 0 0 auto;
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  box-shadow: 0 6px 22px rgb(0 0 0 / 45%);
   overflow-x: auto;
   scrollbar-width: thin;
+  z-index: 3;
 }
 
 #analysis-toolbar[hidden] {
@@ -375,6 +383,25 @@ kbd {
   cursor: default;
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* Takes the same slot as #view rather than overlaying the stage — exactly one
+   of the two is ever visible, so they can share one place in the flow. Overlaid
+   with inset:0 it covered the floating toolbars and swallowed their clicks. */
+#schematic-view {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: default;
+}
+
+/* `display: block` above beats the hidden attribute's own `display: none`, so
+   both canvases need this said explicitly — the same trap the status bar's
+   readouts hit. Without it both are laid out at once and they stack. */
+#view[hidden],
+#schematic-view[hidden] {
+  display: none;
 }
 
 #analysis-toggle[aria-pressed='true'],

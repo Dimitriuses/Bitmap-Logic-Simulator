@@ -93,6 +93,16 @@
           <div class="tool-group">
             <button id="analysis-run-toolbar" class="primary" type="button" disabled title="Analyse the selection (Enter)">Analyse selection</button>
           </div>
+          <div class="tool-group" role="radiogroup" aria-label="View">
+            <button id="view-pixels" class="tool active" type="button" title="Show the circuit as pixels">Pixels</button>
+            <button id="view-schematic" class="tool" type="button" title="Show the selection as a schematic" disabled>Schematic</button>
+          </div>
+
+          <div class="tool-group" role="radiogroup" aria-label="Detail" id="level-group" hidden>
+            <button id="level-recognised" class="tool active" type="button" title="Standard gate symbols, recognised from the inverters">Gates</button>
+            <button id="level-faithful" class="tool" type="button" title="One symbol per inverter — the ground truth">Inverters</button>
+          </div>
+
           <div class="tool-group">
             <button id="analysis-panel-toggle" type="button" title="Show or hide the analysis panel">Panel</button>
           </div>
@@ -107,6 +117,7 @@
         </div>
 
         <canvas id="view"></canvas>
+        <canvas id="schematic-view" hidden></canvas>
         <div id="dropzone">Drop a PNG schematic</div>
         <div id="toast" role="status" aria-live="polite"></div>
 
