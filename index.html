@@ -270,16 +270,23 @@
 
       <div id="statusbar">
         <span class="stat" id="dirty-flag" hidden>● unsaved</span>
-        <span class="stat"><b id="stat-size">—</b> px</span>
-        <span class="stat"><b id="stat-wires">—</b> wires</span>
-        <span class="stat"><b id="stat-gates">—</b> gates</span>
-        <span class="stat">cycle <b id="stat-cycle">0</b></span>
-        <span class="stat"><b id="stat-rate">—</b></span>
-        <span class="stat"><b id="stat-fps">—</b></span>
+        <button class="stat copyable" id="stat-cursor-field" type="button" data-copy="cursor"
+          title="Pixel under the pointer — click to copy. While the arrow keys are driving, this is the editor's pointer, the one the marker on the canvas shows.">
+          cursor <b id="stat-cursor">—</b>
+        </button>
+        <button class="stat copyable" id="stat-selection-field" type="button" data-copy="selection"
+          title="Selected region — click to copy" hidden></button>
+        <button class="stat copyable" type="button" data-copy="size" title="Click to copy"><b id="stat-size">—</b> px</button>
+        <button class="stat copyable" type="button" data-copy="wires" title="Click to copy"><b id="stat-wires">—</b> wires</button>
+        <button class="stat copyable" type="button" data-copy="gates" title="Click to copy"><b id="stat-gates">—</b> gates</button>
+        <button class="stat copyable" type="button" data-copy="cycle" title="Click to copy">cycle <b id="stat-cycle">0</b></button>
+        <button class="stat copyable" type="button" data-copy="rate" title="Click to copy"><b id="stat-rate">—</b></button>
+        <button class="stat copyable" type="button" data-copy="fps" title="Click to copy"><b id="stat-fps">—</b></button>
         <span class="keys">
           <kbd>Space</kbd> pause · <kbd>Esc</kbd> settings · wheel zoom · middle drag pan · left
           click = HIGH · right click = toggle
         </span>
+        <button id="copy-status" type="button" title="Copy everything in this bar">⧉ Copy all</button>
       </div>
     </div>
 

@@ -3,6 +3,7 @@
 import { AnalysisPanel } from './analysis-panel.js';
 import type { PixelBlock } from './block.js';
 import { fromHex, toCss, toHex, type Rgba } from './colors.js';
+import { copyText } from './copy.js';
 import { queryDom, type Dom } from './dom.js';
 import { CircuitDocument } from './document.js';
 import { Editor, type EditorMode } from './editor.js';
@@ -58,6 +59,13 @@ interface Pinch {
 
 const EMPTY_PIXELS: ReadonlyMap<number, Rgba> = new Map();
 
+/** A <b> for the status bar, which styles it as the emphasised number. */
+function strong(text: string): HTMLElement {
+  const b = document.createElement('b');
+  b.textContent = text;
+  return b;
+}
+
 class App {
   private readonly dom: Dom;
   private readonly renderer: Renderer;
@@ -102,6 +110,15 @@ class App {
   private hover: PixelPoint | null = null;
   /** True once the arrows have moved the pointer away from the real cursor. */
   private nudged = false;
+  /**
+   * Pixel under the physical mouse, in both modes, purely for the status bar.
+   *
+   * Deliberately separate from `hover`: that one is edit-mode only and drives
+   * the preview, the stamp and where a tool acts, so widening it to simulate
+   * mode would change what the editor does. This one is read by nothing but
+   * the readout.
+   */
+  private pointerPixel: PixelPoint | null = null;
   private dirty = false;
   /** Consecutive auto-repeats of a held arrow key, for acceleration. */
   private repeats = 0;
@@ -298,6 +315,21 @@ class App {
 
   #bindControls(): void {
     const { dom } = this;
+
+    // Same rule as the toolbar: Enter and Space activate a focused <button>,
+    // which are exactly the keys the editor needs, so a click must not leave
+    // focus behind. Tab still reaches them deliberately.
+    dom.statusbar.addEventListener('mousedown', (e) => {
+      if ((e.target as HTMLElement | null)?.closest('button')) e.preventDefault();
+    });
+
+    for (const button of dom.copyable) {
+      button.addEventListener('click', () => {
+        const key = button.dataset.copy ?? '';
+        void this.#copy(this.#statValue(key), key);
+      });
+    }
+    dom.copyStatus.addEventListener('click', () => void this.#copy(this.#statusReport(), 'the status bar'));
 
     dom.settingsToggle.addEventListener('click', () => this.toggleSettings());
     dom.settingsClose.addEventListener('click', () => this.toggleSettings(false));
@@ -668,6 +700,7 @@ class App {
       }
 
       this.lastMouse = this.#local(e);
+      this.pointerPixel = this.#pixelAt(e);
       if (this.editor.mode === 'edit' && !this.nudged) this.hover = this.#pixelAt(e);
 
       if (this.editor.handlePointerDown(e, this.#actionPixel(e))) {
@@ -713,6 +746,7 @@ class App {
 
       const prev = this.lastMouse;
       this.lastMouse = now;
+      this.pointerPixel = this.#pixelAt(e);
 
       if (this.editor.mode === 'edit') {
         // Moving the real mouse takes the pointer back from the arrow keys.
@@ -766,6 +800,7 @@ class App {
 
     canvas.addEventListener('pointerleave', () => {
       this.hover = null;
+      this.pointerPixel = null;
     });
   }
 
@@ -1018,6 +1053,127 @@ class App {
     }
     this.dom.statCycle.textContent = circuit.cycle.toLocaleString();
     this.dom.zoomValue.textContent = `${(this.viewport.zoom * 100).toFixed(0)}%`;
+    this.#updatePositionStats(circuit);
+  }
+
+  /**
+   * Where the pointer is, and what is selected.
+   *
+   * Run every frame rather than from the pointer handlers: the selection also
+   * changes from the keyboard, from undo and from a mode switch, and a readout
+   * that is correct only after a mouse move is a readout nobody trusts.
+   */
+  #updatePositionStats(circuit: Circuit): void {
+    const { dom } = this;
+
+    // Match #actionPixel: once the arrows are driving, the app's pointer is the
+    // real one and the physical mouse is stale, so the readout must follow the
+    // marker rather than the mouse.
+    const at = this.nudged && this.hover ? this.hover : this.pointerPixel;
+    const inside =
+      at !== null && at.x >= 0 && at.y >= 0 && at.x < circuit.width && at.y < circuit.height;
+    dom.statCursor.textContent = inside ? `${at.x}, ${at.y}` : '—';
+
+    const rect = this.editor.mode === 'edit' ? this.editor.selection : null;
+    dom.statSelectionField.hidden = rect === null;
+    if (rect) {
+      // Inclusive bounds: a 1x1 selection reads as a single pixel, not a range.
+      const x1 = rect.x + rect.width - 1;
+      const y1 = rect.y + rect.height - 1;
+      dom.statSelectionField.replaceChildren(
+        strong(`${rect.width}×${rect.height}`),
+        document.createTextNode(` at ${rect.x},${rect.y}–${x1},${y1}`)
+      );
+    }
+  }
+
+  /**
+   * The text behind one readout.
+   *
+   * Read from the DOM rather than recomputed, so what lands on the clipboard is
+   * what the user was looking at when they clicked. Recomputing would let the
+   * two drift for the counters that only refresh twice a second.
+   */
+  #statValue(key: string): string {
+    const { dom } = this;
+    const text = (el: HTMLElement) => (el.textContent ?? '').trim();
+    switch (key) {
+      case 'cursor':
+        return text(dom.statCursor);
+      case 'selection':
+        return text(dom.statSelectionField);
+      case 'size':
+        return text(dom.statSize);
+      case 'wires':
+        return text(dom.statWires);
+      case 'gates':
+        return text(dom.statGates);
+      case 'cycle':
+        return text(dom.statCycle);
+      case 'rate':
+        return text(dom.statRate);
+      case 'fps':
+        return text(dom.statFps);
+      default:
+        return '';
+    }
+  }
+
+  /**
+   * Everything in the bar, as a block worth pasting somewhere.
+   *
+   * The selection is given twice: once as it reads on screen, and once
+   * decomposed, because the reason to copy a rectangle is usually to feed it to
+   * something else.
+   */
+  #statusReport(): string {
+    const lines: string[] = [];
+    if (this.source) lines.push(this.source.name);
+    if (this.doc?.dirty) lines.push('unsaved edits');
+
+    const pairs: [string, string][] = [
+      ['size', `${this.#statValue('size')} px`],
+      ['wires', this.#statValue('wires')],
+      ['gates', this.#statValue('gates')],
+      ['cycle', this.#statValue('cycle')],
+      ['rate', this.#statValue('rate')],
+      ['fps', this.#statValue('fps')],
+      ['zoom', (this.dom.zoomValue.textContent ?? '').trim()],
+    ];
+
+    const cursor = this.#statValue('cursor');
+    if (cursor && cursor !== '—') pairs.push(['cursor', cursor]);
+
+    const rect = this.editor.mode === 'edit' ? this.editor.selection : null;
+    if (rect) {
+      pairs.push(['selection', this.#statValue('selection')]);
+      pairs.push([
+        '',
+        `x=${rect.x} y=${rect.y} w=${rect.width} h=${rect.height}`,
+      ]);
+    }
+
+    const width = Math.max(...pairs.map(([k]) => k.length));
+    for (const [key, value] of pairs) {
+      if (value === '' || value === '—') continue;
+      lines.push(`${key.padEnd(width)}  ${value}`);
+    }
+    return lines.join('\n');
+  }
+
+  async #copy(text: string, what: string): Promise<void> {
+    const clean = text.trim();
+    if (clean === '' || clean === '—') {
+      this.toast(`Nothing to copy from ${what}.`, true);
+      return;
+    }
+    const outcome = await copyText(clean);
+    if (outcome.ok) {
+      const preview = clean.includes('\n') ? `${what}` : `${what}: ${clean}`;
+      this.toast(`Copied ${preview}`);
+    } else {
+      this.toast(`Could not copy — ${outcome.reason}`, true);
+    }
   }
 
   async #pollFile(now: number): Promise<void> {

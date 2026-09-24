@@ -230,6 +230,31 @@ A saved circuit reopens identically. On Safari individual colour channels can
 come back off by one on colour-rich schematics; wire detection is unaffected, so
 the circuit is the same.
 
+## The status bar
+
+Along the bottom: the pixel under the pointer, the selected region when there is
+one, then the circuit's size, wire and gate counts, cycle, rate and frame rate.
+
+The cursor readout follows the physical mouse in both modes — and once the arrow
+keys are driving, it follows the editor's pointer instead, so it always agrees
+with the marker on the canvas and with the pixel a click will hit.
+
+**Every readout is clickable and copies itself**, and **⧉ Copy all** on the right
+copies the whole bar as a block, with the selection given both as displayed and
+decomposed:
+
+```
+Flip Flop.png
+size       45×27 px
+wires      27
+gates      20
+cycle      256
+selection  10×7 at 17,9–26,15
+           x=17 y=9 w=10 h=7
+```
+
+A readout showing `—` refuses rather than copying the placeholder.
+
 ## Analysing a circuit
 
 Select a region with the selection tool and press <kbd>A</kbd>, or **🔬 Analyse**.

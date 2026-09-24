@@ -34,6 +34,18 @@ FileSource ──decode──▶ CircuitDocument ──compile──▶ Circuit 
 - **Space always pauses; there is no apply key.** The arrow keys move the editor's own pointer, and a held mouse button is what makes them draw — so nothing competes for Space. A browser cannot move the OS cursor, hence the app-side pointer and the marker drawn whenever it has drifted from the physical one.
 - **A floating paste is editor state, never document state.** It is drawn by the renderer overlay and reaches the document only on Enter, which is what makes cancelling free and keeps a paste at one recompile.
 - **Toolbar buttons must not keep focus.** Enter and Space are the HTML activation keys for `<button>`, so a focused toolbar button swallows exactly the keys the editor needs — measured. `mousedown` is `preventDefault`ed to stop focus-on-click while leaving Tab working.
+- **The status bar's readouts are `<button>` too**, so the focus rule above applies there as
+  well — `#statusbar` gets the same `mousedown` `preventDefault`. Clicking one copies its value;
+  without that, a click would leave focus on the button and Space would both pause *and* re-copy.
+- **[src/copy.ts](src/copy.ts) is not [src/clipboard.ts](src/clipboard.ts).** `copy.ts` puts plain
+  text on the *system* clipboard, for the status bar. `clipboard.ts` holds a rectangle of pixels
+  for the editor's copy/cut/paste and never touches the system clipboard at all. Both reasonably
+  want the word "clipboard"; only one of them means it.
+- **`navigator.clipboard` needs a secure context**, which plain `http://` on a non-localhost host
+  is not — so `copy.ts` falls back to the off-screen-textarea `execCommand` trick and reports
+  failure rather than silently doing nothing. Note that a paste probe cannot verify any of this
+  under Playwright: synthetic key events do not invoke the native paste action in *any* engine
+  (checked with a textarea-to-textarea control). Only Chromium/Edge can read the clipboard back.
 - **`#toolbar` scrolls horizontally, so it clips.** `overflow-x: auto` forces `overflow-y: auto`, which silently hid the palette popover entirely. Anything that must escape the toolbar's box has to be a sibling of it, not a child.
 
 ### Circuit analysis ([specs/003-circuit-analysis/](specs/003-circuit-analysis/))

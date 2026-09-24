@@ -81,6 +81,12 @@ export function queryDom() {
     refresh: el<HTMLInputElement>('refresh'),
     refreshValue: el('refresh-value'),
 
+    statCursor: el('stat-cursor'),
+    statCursorField: el<HTMLButtonElement>('stat-cursor-field'),
+    statSelectionField: el<HTMLButtonElement>('stat-selection-field'),
+    statusbar: el('statusbar'),
+    copyStatus: el<HTMLButtonElement>('copy-status'),
+    copyable: [...document.querySelectorAll<HTMLButtonElement>('#statusbar .copyable')],
     statSize: el('stat-size'),
     statWires: el('stat-wires'),
     statGates: el('stat-gates'),

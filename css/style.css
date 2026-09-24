@@ -322,6 +322,54 @@ kbd {
   white-space: nowrap;
 }
 
+/* The coordinate changes on every mouse move, so it is given a floor wide
+   enough for the largest schematics here (1024x1024). Without it, each digit
+   gained or lost shunts the whole status bar sideways. `.stat b` already
+   supplies tabular figures, which keeps the digits themselves from jittering. */
+#stat-cursor-field {
+  min-width: 108px;
+}
+
+#stat-selection-field {
+  color: var(--accent);
+}
+
+/* The readouts are <button> so they can be clicked and tabbed to, but they are
+   still readouts: the base button chrome is stripped back so the bar reads as
+   text until you point at it. Padding is kept symmetrical so the hover tint
+   does not make the row jump. */
+.stat.copyable {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 1px 5px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.stat.copyable:hover {
+  background: #242b39;
+  border-color: #3a4354;
+}
+
+.stat.copyable:active {
+  background: #2c3444;
+}
+
+/* Hidden readouts are <button hidden>, and `display: flex` on the bar would
+   otherwise override the hidden attribute's `display: none`. */
+#statusbar [hidden] {
+  display: none;
+}
+
+#copy-status {
+  padding: 2px 8px;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
 /* ---------------------------------------------------------------- overlays */
 
 #dropzone {
