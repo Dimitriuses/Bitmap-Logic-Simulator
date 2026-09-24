@@ -222,18 +222,44 @@ evidence and not proof, and the browser suite asserts no line can say otherwise.
 **Independent Test**: name a net, then confirm the name replaces its coordinates in every view
 that mentions it.
 
-- [ ] T045 [P] [US3] Create `src/labels.ts` with labels anchored to a pixel coordinate rather than a net id, and resolution that asks the compiled circuit which net occupies the anchor (LB-1, LB-2).
-- [ ] T046 [US3] Report a label whose anchor is no longer wire as **unresolved** in `src/labels.ts` — kept and shown, never deleted and never reattached to a nearby net (LB-3, FR-025).
-- [ ] T047 [US3] Add a single naming function in `src/labels.ts` that every view calls, so a name replaces the default identifier in lists, schematic, expressions, tables and discrepancies (LB-4, FR-022).
-- [ ] T048 [US3] Implement the browser working copy in `src/labels.ts`, keyed to the circuit, so names survive a reload without an explicit save (FR-024a).
-- [ ] T049 [US3] Implement sidecar serialisation in `src/labels.ts` in the `bitmap-logic-labels` shape, refusing malformed input with a reason rather than partially reading it (LB-8).
-- [ ] T050 [US3] Implement sidecar save and load in `src/fileHandler.ts` via a save picker with a suggested name, falling back to download — **not** a silent sibling write, which a file handle cannot do (LB-7).
-- [ ] T051 [US3] Detect divergence between the sidecar and the working copy in `src/labels.ts` and prompt a choice in `src/ui.ts` rather than letting either win silently (LB-6, FR-024b).
-- [ ] T052 [US3] Add the netlist list with grouped inputs, outputs, internal and cut nets, plus rename and clear controls, to `index.html`, `src/dom.ts` and `src/analysis-panel.ts` (FR-020, FR-021).
-- [ ] T053 [US3] Carry names into netlist export and restore them on import in `src/netlist-json.ts` (FR-026).
-- [ ] T054 [US3] Verify Scenario 10 of [quickstart.md](./quickstart.md) via a new `scripts/verify/labels.mjs` plus a browser pass: editing the pixels under an anchor leaves the label unresolved rather than moved, the saved PNG contains no label data, export/import round-trips byte-identically, malformed input is refused, and **names survive editing the `.png` externally and reloading** (SC-006, SC-012, SC-012a).
+- [X] T045 [P] [US3] Create `src/labels.ts` with labels anchored to a pixel coordinate rather than a net id, and resolution that asks the compiled circuit which net occupies the anchor (LB-1, LB-2).
+- [X] T046 [US3] Report a label whose anchor is no longer wire as **unresolved** in `src/labels.ts` — kept and shown, never deleted and never reattached to a nearby net (LB-3, FR-025).
+- [X] T047 [US3] Add a single naming function in `src/labels.ts` that every view calls, so a name replaces the default identifier in lists, schematic, expressions, tables and discrepancies (LB-4, FR-022).
+- [X] T048 [US3] Implement the browser working copy in `src/labels.ts`, keyed to the circuit, so names survive a reload without an explicit save (FR-024a).
+- [X] T049 [US3] Implement sidecar serialisation in `src/labels.ts` in the `bitmap-logic-labels` shape, refusing malformed input with a reason rather than partially reading it (LB-8).
+- [X] T050 [US3] Implement sidecar save and load in `src/fileHandler.ts` via a save picker with a suggested name, falling back to download — **not** a silent sibling write, which a file handle cannot do (LB-7).
+- [X] T051 [US3] Detect divergence between the sidecar and the working copy in `src/labels.ts` and prompt a choice in `src/ui.ts` rather than letting either win silently (LB-6, FR-024b).
+- [X] T052 [US3] Add the netlist list with grouped inputs, outputs, internal and cut nets, plus rename and clear controls, to `index.html`, `src/dom.ts` and `src/analysis-panel.ts` (FR-020, FR-021).
+- [X] T053 [US3] Carry names into netlist export and restore them on import in `src/netlist-json.ts` (FR-026).
+- [X] T054 [US3] Verify Scenario 10 of [quickstart.md](./quickstart.md) via a new `scripts/verify/labels.mjs` plus a browser pass: editing the pixels under an anchor leaves the label unresolved rather than moved, the saved PNG contains no label data, export/import round-trips byte-identically, malformed input is refused, and **names survive editing the `.png` externally and reloading** (SC-006, SC-012, SC-012a).
 
-**Checkpoint**: findings read in the user's vocabulary.
+**Checkpoint**: findings read in the user's vocabulary. `labels` 51/51 headless; 13/13 browser
+checks on all four browsers.
+
+**LB-3 verified end to end.** Name a net, clear the region it sat on, analyse again, and the
+panel says:
+
+> `1 name(s) no longer sit on a wire: CLK (1,1). They are kept, not moved.`
+
+The name is not deleted, and the suite separately asserts it has not reattached itself to any
+other net — the failure that would matter, because a name on the wrong wire still looks right.
+
+**Two mistakes of mine, both caught by the work rather than by the tests passing:**
+
+1. **Labels were being resolved against the wrong circuit.** The panel's net ids come from the
+   analysed *crop*, but `resolvedLabels()` resolved against the whole document — so the ids
+   would never have matched. It surfaced only because TypeScript flagged an unused
+   `labelOrigin` field, which was the symptom of resolution happening in the wrong place.
+   Resolution now lives in the panel, against `result.circuit` with `result.rect` as the
+   origin.
+2. **The first version of the browser test proved nothing.** It erased horizontal bands over
+   20–80% of the canvas while the anchor sat at pixel (1,1), so the pixel was never cleared and
+   the label legitimately still resolved. Replaced with select-all plus Delete, which cannot
+   miss. A test that aims at a coordinate by fraction-of-canvas arithmetic is a test that
+   quietly stops testing.
+
+**One naming function, enforced**: `nameFor` is defined once and both call sites pass a
+resolution, so a name cannot appear in the net list but not in the truth table.
 
 ---
 

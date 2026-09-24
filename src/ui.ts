@@ -22,6 +22,8 @@ import {
 } from './fileHandler.js';
 import { resolveKey, type InputAction } from './keymap.js';
 import type { Netlist } from './netlist.js';
+import { LabelStore, labelsDiffer, parseSidecar } from './labels.js';
+import { pickTextFile, saveTextFile } from './fileHandler.js';
 import { Palette } from './palette.js';
 import { saveDocument } from './png.js';
 import { Renderer, Viewport, type Overlay, type Point } from './renderer.js';
@@ -78,12 +80,14 @@ class App {
   private doc: CircuitDocument | null = null;
   private circuit: Circuit | null = null;
   private readonly analysis: AnalysisPanel;
+  /** Names for this circuit's nets, anchored to pixels. */
+  private labelStore = new LabelStore('untitled');
   private readonly schematicView: SchematicView;
   /** Which of the two views the stage is showing, in analysis mode. */
   private stageView: 'pixels' | 'schematic' = 'pixels';
   private schematicLevel: SchematicLevel = 'recognised';
   /** The netlist the current diagram was built from, for rebuilding on a level switch. */
-  private schematicSource: { netlist: Netlist; rect: Rect } | null = null;
+  private schematicSource: { netlist: Netlist; rect: Rect; nameOf: (n: number) => string | null } | null = null;
   /** True once the circuit changed under a displayed diagram. */
   private schematicStale = false;
   /** A new diagram waiting to be fitted once its canvas has a real size. */
@@ -171,7 +175,14 @@ class App {
       closeSettings: () => this.toggleSettings(false),
       // A completed analysis is what makes a schematic possible, so the panel
       // hands its netlist over rather than the stage re-deriving one.
-      showSchematic: (netlist: Netlist, rect: Rect) => this.setSchematicSource(netlist, rect),
+      showSchematic: (netlist: Netlist, rect: Rect, nameOf) =>
+        this.setSchematicSource(netlist, rect, nameOf),
+      labels: () => this.labelStore.labels,
+      rename: (anchor, name) => {
+        this.labelStore.set(anchor, name);
+        this.labelStore.saveLocal();
+        this.dirty = true;
+      },
     });
 
     this.#bindControls();
@@ -241,6 +252,13 @@ class App {
       const loadMs = performance.now() - t0;
 
       const isNewFile = this.source !== source;
+      if (this.labelStore.circuitName !== source.name) {
+        // Names belong to a circuit, so loading a different one starts a
+        // different set — recovered from the browser working copy if there is
+        // one, so a forgotten save costs nothing.
+        this.labelStore = new LabelStore(source.name);
+        this.labelStore.loadLocal();
+      }
       this.doc = doc;
       this.circuit = circuit;
       this.source = source;
@@ -433,6 +451,10 @@ class App {
 
     // Same rule as the editing toolbar and the status bar: Enter and Space are
     // the HTML activation keys for <button>, and analysis mode needs Enter.
+    dom.labelsSave.addEventListener('click', () => void this.saveLabels());
+    dom.labelsLoad.addEventListener('click', () => void this.loadLabels());
+    dom.labelsClear.addEventListener('click', () => this.clearLabels());
+
     dom.viewPixels.addEventListener('click', () => this.setStageView('pixels'));
     dom.viewSchematic.addEventListener('click', () => this.setStageView('schematic'));
     dom.levelRecognised.addEventListener('click', () => this.setSchematicLevel('recognised'));
@@ -592,8 +614,12 @@ class App {
    * Both levels come from this one call, so switching between them later is a
    * rebuild from the same netlist rather than a re-analysis (SM-2).
    */
-  setSchematicSource(netlist: Netlist, rect: Rect): void {
-    this.schematicSource = { netlist, rect };
+  setSchematicSource(
+    netlist: Netlist,
+    rect: Rect,
+    nameOf: (n: number) => string | null = () => null
+  ): void {
+    this.schematicSource = { netlist, rect, nameOf };
     this.schematicStale = false;
     this.#rebuildSchematic();
     this.dom.viewSchematic.disabled = this.schematicView.current === null;
@@ -606,7 +632,10 @@ class App {
       this.schematicView.setSchematic(null);
       return;
     }
-    const built = buildSchematic(source.netlist, source.rect, { level: this.schematicLevel });
+    const built = buildSchematic(source.netlist, source.rect, {
+      level: this.schematicLevel,
+      nameOf: source.nameOf,
+    });
     if (!built.ok) {
       this.toast(`No diagram: ${built.reason}`, true);
       this.schematicView.setSchematic(null);
@@ -650,6 +679,61 @@ class App {
     this.dom.levelRecognised.classList.toggle('active', level === 'recognised');
     this.dom.levelFaithful.classList.toggle('active', level === 'faithful');
     this.#rebuildSchematic();
+  }
+
+  async saveLabels(): Promise<void> {
+    if (this.labelStore.size === 0) {
+      this.toast('No names to save yet.', true);
+      return;
+    }
+    try {
+      const how = await saveTextFile(this.labelStore.sidecarName, this.labelStore.toJson());
+      this.toast(
+        how === 'written'
+          ? `Saved ${this.labelStore.size} name(s).`
+          : `Downloaded ${this.labelStore.sidecarName}.`
+      );
+    } catch (err) {
+      if (!isAbort(err)) this.toast(`Could not save names: ${errorMessage(err)}`, true);
+    }
+  }
+
+  async loadLabels(): Promise<void> {
+    try {
+      const file = await pickTextFile();
+      if (!file) return;
+      const parsed = parseSidecar(file.text);
+      if (!parsed.ok) {
+        this.toast(`Could not read those names: ${parsed.reason}`, true);
+        return;
+      }
+      // Neither store silently wins (LB-6): if they disagree, ask.
+      if (this.labelStore.size > 0 && labelsDiffer(this.labelStore.labels, parsed.labels)) {
+        const keep = window.confirm(
+          `This file has ${parsed.labels.length} name(s); ` +
+            `${this.labelStore.size} are already loaded, and they differ.
+
+` +
+            'OK to replace what is loaded, Cancel to keep it.'
+        );
+        if (!keep) return;
+      }
+      this.labelStore.replaceAll(parsed.labels);
+      this.labelStore.saveLocal();
+      this.dirty = true;
+      this.toast(`Loaded ${parsed.labels.length} name(s).`);
+    } catch (err) {
+      if (!isAbort(err)) this.toast(`Could not load names: ${errorMessage(err)}`, true);
+    }
+  }
+
+  clearLabels(): void {
+    if (this.labelStore.size === 0) return;
+    if (!window.confirm(`Remove all ${this.labelStore.size} name(s)?`)) return;
+    this.labelStore.clearAll();
+    this.labelStore.saveLocal();
+    this.dirty = true;
+    this.toast('Names cleared.');
   }
 
   /** E and A each toggle one mode against Simulate. */

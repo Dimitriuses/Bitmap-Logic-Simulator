@@ -167,10 +167,17 @@
 
           <div class="group" id="analysis-io-group" hidden>
             <h3>Nets</h3>
-            <p class="hint">Click an output to stop treating it as one.</p>
+            <p class="hint">Click a net to name it. Click an output's ✕ to stop treating it as one.</p>
             <div id="analysis-inputs" class="netlist-chips"></div>
             <div id="analysis-outputs" class="netlist-chips"></div>
+            <div id="analysis-internal" class="netlist-chips"></div>
             <div id="analysis-cut" class="netlist-chips"></div>
+            <p id="analysis-unresolved" class="banner warn" hidden></p>
+            <div class="row">
+              <button id="labels-save" type="button" title="Save names to a sidecar file beside the circuit">Save names…</button>
+              <button id="labels-load" type="button" title="Load names from a sidecar file">Load names…</button>
+              <button id="labels-clear" type="button" title="Remove every name">Clear names</button>
+            </div>
           </div>
 
           <div class="group" id="analysis-table-group" hidden>

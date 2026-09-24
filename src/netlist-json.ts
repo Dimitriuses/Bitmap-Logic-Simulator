@@ -11,6 +11,7 @@
 // The UI says so; this module simply refuses to guess about malformed input.
 
 import type { GateDirection, GateInfo, NetId, NetInfo, Netlist } from './netlist.js';
+import type { Label } from './labels.js';
 
 export interface NetlistJson {
   readonly format: 'bitmap-logic-netlist';
@@ -32,9 +33,21 @@ export interface NetlistJson {
     readonly outputs: readonly NetId[];
     readonly cut: readonly NetId[];
   };
+  /**
+   * User-given names, anchored to pixels rather than to net ids.
+   *
+   * Anchors, not ids, for the same reason they are stored that way: an id is
+   * only meaningful within one compile, so a name keyed by id would arrive
+   * somewhere else entirely. Optional — a file without them is still valid.
+   */
+  readonly labels?: readonly {
+    readonly anchor: { readonly x: number; readonly y: number };
+    readonly kind: 'net' | 'gate';
+    readonly name: string;
+  }[];
 }
 
-export function exportNetlist(netlist: Netlist): NetlistJson {
+export function exportNetlist(netlist: Netlist, labels: readonly Label[] = []): NetlistJson {
   return {
     format: 'bitmap-logic-netlist',
     version: 1,
@@ -55,7 +68,35 @@ export function exportNetlist(netlist: Netlist): NetlistJson {
       outputs: [...netlist.outputs],
       cut: [...netlist.cut],
     },
+    labels: labels.map((l) => ({
+      anchor: { x: l.anchor.x, y: l.anchor.y },
+      kind: l.kind,
+      name: l.name,
+    })),
   };
+}
+
+/** Names carried by an imported netlist, validated the same way the rest is. */
+export function labelsFrom(text: string): Label[] {
+  try {
+    const raw = JSON.parse(text) as Partial<NetlistJson>;
+    if (!Array.isArray(raw.labels)) return [];
+    const out: Label[] = [];
+    for (const l of raw.labels) {
+      const a = l?.anchor as { x?: unknown; y?: unknown } | undefined;
+      if (typeof a?.x !== 'number' || typeof a?.y !== 'number') continue;
+      if (!Number.isInteger(a.x) || !Number.isInteger(a.y)) continue;
+      if (typeof l.name !== 'string' || l.name.trim() === '') continue;
+      out.push({
+        anchor: { x: a.x, y: a.y },
+        kind: l.kind === 'gate' ? 'gate' : 'net',
+        name: l.name.trim(),
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }
 
 export type ImportResult =
@@ -167,6 +208,6 @@ function sameSet(a: readonly NetId[], b: readonly NetId[]): boolean {
 }
 
 /** Pretty-printed, so a diff between two exports is readable. */
-export function toJsonText(netlist: Netlist): string {
-  return `${JSON.stringify(exportNetlist(netlist), null, 2)}\n`;
+export function toJsonText(netlist: Netlist, labels: readonly Label[] = []): string {
+  return `${JSON.stringify(exportNetlist(netlist, labels), null, 2)}\n`;
 }

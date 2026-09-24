@@ -17,7 +17,8 @@ import type { CircuitDocument } from './document.js';
 import type { Dom } from './dom.js';
 import { layout } from './layout.js';
 import { netById, type NetId, type Netlist } from './netlist.js';
-import { importNetlist, toJsonText } from './netlist-json.js';
+import { makeNamer, resolveLabels, type Label, type Resolution } from './labels.js';
+import { importNetlist, labelsFrom, toJsonText } from './netlist-json.js';
 import { sweep, sweepSequential, type Discrepancy } from './oracle.js';
 import { describePowerOn, type StorageElement, type StorageReport } from './storage-elements.js';
 
@@ -37,7 +38,17 @@ export interface PanelHost {
    * The panel does not build the diagram itself: a schematic is a view, and
    * views belong to the stage. This keeps one netlist behind both.
    */
-  showSchematic(netlist: Netlist, rect: Rect): void;
+  showSchematic(netlist: Netlist, rect: Rect, nameOf: (n: NetId) => string | null): void;
+  /**
+   * Every name the user has given, anchored in DOCUMENT coordinates.
+   *
+   * Raw rather than resolved, because resolution depends on which circuit the
+   * ids came from — and the panel's ids come from the analysed crop, not the
+   * whole document. Resolving here keeps the two in step.
+   */
+  labels(): readonly Label[];
+  /** Name the net at this document pixel; an empty name clears it. */
+  rename(anchor: { x: number; y: number }, name: string): void;
 }
 
 /** Rows swept between yields to the browser. */
@@ -142,7 +153,13 @@ export class AnalysisPanel {
     }
 
     this.#result = outcome.result;
-    this.host.showSchematic(outcome.result.netlist, rect);
+    // The diagram gets the same names as everything else — one naming
+    // function, so a label cannot appear in the list but not on the symbol.
+    this.host.showSchematic(
+      outcome.result.netlist,
+      rect,
+      makeNamer(this.#resolve(outcome.result))
+    );
     this.#render(outcome.result);
     this.#status('');
 
@@ -274,7 +291,8 @@ export class AnalysisPanel {
 
   #render(result: AnalysisResult): void {
     const { dom } = this;
-    const name = nameFor(result.netlist);
+    const resolution = this.#resolve(result);
+    const name = nameFor(result.netlist, resolution);
 
     dom.analysisShapeGroup.hidden = false;
     dom.analysisShape.textContent =
@@ -294,24 +312,44 @@ export class AnalysisPanel {
 
     // --- nets
     dom.analysisIoGroup.hidden = false;
+    const named = new Set([...result.inputs, ...result.outputs, ...result.netlist.cut]);
+    const internal = result.netlist.nets
+      .map((n) => n.id)
+      .filter((id) => !named.has(id))
+      .slice(0, 60);
+
     dom.analysisInputs.replaceChildren(
       label('inputs'),
-      ...result.inputs.map((id) => chip(name(id), 'input'))
+      ...result.inputs.map((id) => this.#netChip(result, id, name, 'input'))
     );
     dom.analysisOutputs.replaceChildren(
       label('outputs'),
-      ...result.outputs.map((id) => {
-        const c = chip(name(id), 'output');
-        c.title = 'Click to stop treating this net as an output';
-        c.addEventListener('click', () => this.#unmarkOutput(id));
-        return c;
-      })
+      ...result.outputs.map((id) => this.#netChip(result, id, name, 'output', () => this.#unmarkOutput(id)))
+    );
+    dom.analysisInternal.replaceChildren(
+      ...(internal.length
+        ? [label('internal'), ...internal.map((id) => this.#netChip(result, id, name, 'internal'))]
+        : [])
     );
     dom.analysisCut.replaceChildren(
       ...(result.netlist.cut.length
-        ? [label('cut by the selection'), ...result.netlist.cut.map((id) => chip(name(id), 'cut'))]
+        ? [
+            label('cut by the selection'),
+            ...result.netlist.cut.map((id) => this.#netChip(result, id, name, 'cut')),
+          ]
         : [])
     );
+
+    // A name whose pixel is no longer wire is reported, never quietly dropped
+    // and never moved to a neighbouring net (LB-3).
+    const unresolved = resolution.unresolved;
+    dom.analysisUnresolved.hidden = unresolved.length === 0;
+    if (unresolved.length > 0) {
+      dom.analysisUnresolved.textContent =
+        `${unresolved.length} name(s) no longer sit on a wire: ` +
+        `${unresolved.map((l) => `${l.name} (${l.anchor.x},${l.anchor.y})`).join(', ')}. ` +
+        'They are kept, not moved.';
+    }
 
     // --- truth table
     if (result.table && result.table.outputs.length > 0) {
@@ -473,7 +511,7 @@ export class AnalysisPanel {
     stopped: boolean
   ): void {
     const { dom } = this;
-    const name = nameFor(result.netlist);
+    const name = nameFor(result.netlist, this.#resolve(result));
     dom.analysisOracleGroup.hidden = false;
 
     const scope = stopped
@@ -549,6 +587,64 @@ export class AnalysisPanel {
   // Actions
   // -------------------------------------------------------------------
 
+  /**
+   * A net, as a clickable chip that can be renamed.
+   *
+   * The anchor for a name is the net's probe pixel translated into document
+   * space — a place on the circuit, which is what survives an edit.
+   */
+  #netChip(
+    result: AnalysisResult,
+    id: NetId,
+    name: (n: NetId) => string,
+    kind: string,
+    onDismiss?: () => void
+  ): HTMLElement {
+    const c = chip(name(id), kind);
+    const info = netById(result.netlist, id);
+    const anchor = info
+      ? { x: info.probe.x + result.rect.x, y: info.probe.y + result.rect.y }
+      : null;
+
+    if (anchor) {
+      c.title = `Click to name this net · pixel ${anchor.x},${anchor.y}`;
+      c.addEventListener('click', () => {
+        const current = this.#resolve(result).byNet.get(id)?.name ?? '';
+        const next = window.prompt(
+          `Name for the net at ${anchor.x},${anchor.y}
+(blank to clear)`,
+          current
+        );
+        if (next === null) return;
+        this.host.rename(anchor, next);
+        if (this.#result) this.#render(this.#result);
+      });
+    }
+
+    if (onDismiss) {
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'chip-dismiss';
+      x.textContent = '✕';
+      x.title = 'Stop treating this net as an output';
+      x.addEventListener('mousedown', (e) => e.preventDefault());
+      x.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onDismiss();
+      });
+      c.appendChild(x);
+    }
+    return c;
+  }
+
+  /** Resolve the user's names against the circuit this result was built from. */
+  #resolve(result: AnalysisResult): Resolution {
+    return resolveLabels(this.host.labels(), result.circuit, {
+      x: result.rect.x,
+      y: result.rect.y,
+    });
+  }
+
   #unmarkOutput(id: NetId): void {
     const result = this.#result;
     if (!result) return;
@@ -595,7 +691,7 @@ export class AnalysisPanel {
   #exportNetlist(): void {
     const result = this.#result;
     if (!result) return;
-    const text = toJsonText(result.netlist);
+    const text = toJsonText(result.netlist, this.host.labels());
     const blob = new Blob([text], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -617,13 +713,16 @@ export class AnalysisPanel {
     const file = await chosen;
     if (!file) return;
 
-    const parsed = importNetlist(await file.text());
+    const raw = await file.text();
+    const parsed = importNetlist(raw);
     if (!parsed.ok) {
       this.host.toast(`Could not read that netlist: ${parsed.reason}`, true);
       return;
     }
+    const names = labelsFrom(raw);
     this.host.toast(
-      `Read ${parsed.netlist.nets.length} nets and ${parsed.netlist.gates.length} gates. ` +
+      `Read ${parsed.netlist.nets.length} nets and ${parsed.netlist.gates.length} gates` +
+        `${names.length ? ` and ${names.length} name(s)` : ''}. ` +
         'This was not checked against the engine — treat it as a suggestion to verify.'
     );
   }
@@ -639,9 +738,18 @@ function bits(values: readonly boolean[]): string {
   return values.map((v) => (v ? '1' : '0')).join('') || '—';
 }
 
-/** A short, stable name for a net: its id plus where to find it. */
-function nameFor(netlist: Netlist): (n: NetId) => string {
+/**
+ * The one naming function every view in this panel calls.
+ *
+ * A user-given name always wins; otherwise the net is identified by id and
+ * position. Having exactly one of these is what stops a name appearing in the
+ * net list but not in the truth table.
+ */
+function nameFor(netlist: Netlist, resolution?: Resolution): (n: NetId) => string {
+  const given = resolution ? makeNamer(resolution) : () => null;
   return (id) => {
+    const name = given(id);
+    if (name) return name;
     const info = netById(netlist, id);
     return info ? `n${id}@${info.probe.x},${info.probe.y}` : `n${id}`;
   };

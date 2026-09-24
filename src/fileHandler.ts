@@ -322,3 +322,63 @@ export function setupDragDrop(
     }
   });
 }
+
+// ---------------------------------------------------------------------------
+// Sidecar files
+// ---------------------------------------------------------------------------
+
+/**
+ * Offer a text file for saving.
+ *
+ * NOTE WHAT THIS CANNOT DO. A FileSystemFileHandle gives no access to its
+ * parent directory — there is no getParent(), and resolve() needs a directory
+ * handle to resolve against. So the app cannot silently write
+ * `4bitCPU.labels.json` next to `4bitCPU.png`, however much it would like to.
+ * The user picks the location once, or gets a download. Pretending otherwise in
+ * the UI would promise something the platform does not allow.
+ */
+export async function saveTextFile(suggestedName: string, text: string): Promise<'written' | 'downloaded'> {
+  const blob = new Blob([text], { type: 'application/json' });
+
+  const picker = (window as unknown as {
+    showSaveFilePicker?: (o: unknown) => Promise<FileSystemFileHandle>;
+  }).showSaveFilePicker;
+
+  if (typeof picker === 'function') {
+    const handle = await picker({
+      suggestedName,
+      types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+    });
+    const writable = await (handle as unknown as {
+      createWritable: () => Promise<WritableStream & { write: (b: Blob) => Promise<void>; close: () => Promise<void> }>;
+    }).createWritable();
+    try {
+      await writable.write(blob);
+    } finally {
+      await writable.close();
+    }
+    return 'written';
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = suggestedName;
+  a.click();
+  URL.revokeObjectURL(url);
+  return 'downloaded';
+}
+
+/** Ask for a text file and read it. Resolves to null if the user cancels. */
+export async function pickTextFile(accept = 'application/json,.json'): Promise<{ name: string; text: string } | null> {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = accept;
+  const chosen = new Promise<File | null>((resolve) => {
+    input.addEventListener('change', () => resolve(input.files?.[0] ?? null), { once: true });
+  });
+  input.click();
+  const file = await chosen;
+  if (!file) return null;
+  return { name: file.name, text: await file.text() };
+}
