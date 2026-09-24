@@ -27,7 +27,20 @@ import {
   type ToolId,
 } from './tools/types.js';
 
-export type EditorMode = 'simulate' | 'edit';
+/**
+ * Which mode the editor is in, and therefore what every input means.
+ *
+ * `analysis` is a READ-ONLY mode. It carries the selection so a region can be
+ * chosen to study, and nothing else: no tool dispatch, no stroke, no paste.
+ * That guarantee is a property of the mode rather than of individual handlers,
+ * because a per-handler guarantee is satisfied by the handler nobody checked.
+ */
+export type EditorMode = 'simulate' | 'edit' | 'analysis';
+
+/** Modes in which the editor owns the pointer rather than the simulation. */
+export function ownsPointer(mode: EditorMode): boolean {
+  return mode === 'edit' || mode === 'analysis';
+}
 
 export const MIN_BUS = 1;
 export const MAX_BUS = 16;
@@ -209,6 +222,8 @@ export class Editor {
 
   /** Paste centred on the given bitmap point — usually the middle of the view. */
   paste(centreX: number, centreY: number): boolean {
+    // A pending write may not exist in a read-only mode (MO-5).
+    if (this.mode === 'analysis') return false;
     if (!this.clipboard.hasContent) return false;
     // Selecting the tool makes the block draggable straight away.
     if (this.clipboard.beginPaste(centreX, centreY)) {
@@ -267,6 +282,7 @@ export class Editor {
   // ---------------------------------------------------------------------
 
   handlePointerDown(e: PointerEvent, p: PixelPoint): boolean {
+    if (this.mode === 'analysis') return this.#analysisPointerDown(e, p);
     if (this.mode !== 'edit') return false;
     if (e.button !== 0 && e.button !== 2) return false;
 
@@ -283,6 +299,35 @@ export class Editor {
     this.#activeButton = button;
     this.#pointerId = e.pointerId;
     if (tool.mutates) ctx.doc.beginStroke(tool.label(ctx));
+    tool.down(p, ctx);
+    return true;
+  }
+
+  /**
+   * Analysis mode: the selection tool, and nothing else.
+   *
+   * Deliberately its own branch rather than a loosened edit-mode guard. Edit
+   * mode dispatches whatever tool is selected, and any future tool added there
+   * would silently become reachable here too. This names the one tool that is
+   * allowed and refuses anything that could mutate, so the mode's promise does
+   * not depend on remembering it later.
+   */
+  #analysisPointerDown(e: PointerEvent, p: PixelPoint): boolean {
+    // Consume the right button without acting on it: in a mode that owns the
+    // pointer it must never fall through to poking wire state.
+    if (e.button === 2) return true;
+    if (e.button !== 0) return false;
+
+    const tool = this.#tools.get('select');
+    const ctx = this.#context('primary');
+    if (!tool || !ctx) return false;
+    // Belt and braces: a mutating tool must never begin a stroke here, and if
+    // `select` ever gained that flag this refuses rather than writing.
+    if (tool.mutates) return true;
+
+    this.#active = tool;
+    this.#activeButton = 'primary';
+    this.#pointerId = e.pointerId;
     tool.down(p, ctx);
     return true;
   }

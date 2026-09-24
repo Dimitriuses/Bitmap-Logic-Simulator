@@ -39,7 +39,11 @@ export function queryDom() {
     settingsToggle: el<HTMLButtonElement>('settings-toggle'),
     settingsClose: el<HTMLButtonElement>('settings-close'),
 
-    analyse: el<HTMLButtonElement>('analyse'),
+    analysisToggle: el<HTMLButtonElement>('analysis-toggle'),
+    analysisToolbar: el('analysis-toolbar'),
+    analysisSelect: el<HTMLButtonElement>('analysis-select'),
+    analysisRunToolbar: el<HTMLButtonElement>('analysis-run-toolbar'),
+    analysisPanelToggle: el<HTMLButtonElement>('analysis-panel-toggle'),
     analysis: el('analysis'),
     analysisClose: el<HTMLButtonElement>('analysis-close'),
     analysisRun: el<HTMLButtonElement>('analysis-run'),

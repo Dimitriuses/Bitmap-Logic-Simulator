@@ -6,7 +6,7 @@ import { fromHex, toCss, toHex, type Rgba } from './colors.js';
 import { copyText } from './copy.js';
 import { queryDom, type Dom } from './dom.js';
 import { CircuitDocument } from './document.js';
-import { Editor, type EditorMode } from './editor.js';
+import { Editor, ownsPointer, type EditorMode } from './editor.js';
 import { errorMessage, isAbort } from './errors.js';
 import {
   DEFAULT_EXAMPLE,
@@ -141,6 +141,9 @@ class App {
       selection: () => this.editor.selection,
       toast: (message, isError) => this.toast(message, isError),
       offerPaste: (block: PixelBlock) => {
+        // FR-009 / MO-10: analysis mode never applies a replacement itself.
+        // Taking one is an explicit switch into edit mode, after which the
+        // ordinary paste mechanism owns it.
         if (this.editor.mode !== 'edit') this.setMode('edit');
         const centre = this.#viewCentre();
         const placed = this.editor.clipboard.floatBlock(block, centre.x, centre.y);
@@ -406,9 +409,17 @@ class App {
       if ((e.target as HTMLElement | null)?.closest('button')) e.preventDefault();
     });
 
-    dom.modeToggle.addEventListener('click', () =>
-      this.setMode(this.editor.mode === 'edit' ? 'simulate' : 'edit')
-    );
+    dom.modeToggle.addEventListener('click', () => this.toggleModeTo('edit'));
+    dom.analysisToggle.addEventListener('click', () => this.toggleModeTo('analysis'));
+
+    // Same rule as the editing toolbar and the status bar: Enter and Space are
+    // the HTML activation keys for <button>, and analysis mode needs Enter.
+    dom.analysisToolbar.addEventListener('mousedown', (e) => {
+      if ((e.target as HTMLElement | null)?.closest('button')) e.preventDefault();
+    });
+    for (const button of [dom.modeToggle, dom.analysisToggle]) {
+      button.addEventListener('mousedown', (e) => e.preventDefault());
+    }
 
     for (const button of dom.tools) {
       button.addEventListener('click', () => {
@@ -507,16 +518,30 @@ class App {
   }
 
   setMode(mode: EditorMode): void {
-    const wasEditing = this.editor.mode === 'edit';
+    const before = this.editor.mode;
+    if (before === mode) return;
+
+    // A pending write may not survive into a read-only mode, and the user
+    // should not silently lose it either — so it is committed by the same
+    // route Enter uses, before the mode changes.
+    if (mode === 'analysis' && this.editor.floating) {
+      this.editor.commitPaste();
+    }
+
+    const ownedBefore = before === 'edit' || before === 'analysis';
+    const ownsNow = mode === 'edit' || mode === 'analysis';
+
     this.editor.mode = mode;
 
-    if (mode === 'edit' && !wasEditing) {
-      // A circuit that keeps evaluating while you rewire it changes underneath
-      // you for reasons that look like your edit. Remember the run state so
-      // leaving restores it, rather than always resuming.
+    if (ownsNow && !ownedBefore) {
+      // A circuit that keeps evaluating while you work on it changes underneath
+      // you for reasons that look like your own doing. Remember the run state
+      // so leaving restores it, rather than always resuming. Analysis pauses
+      // for the same reason plus one more: a running simulation competes with
+      // a long sweep for the frame budget.
       this.runningBeforeEdit = this.running;
       if (this.running) this.togglePlay(false);
-    } else if (mode === 'simulate' && wasEditing) {
+    } else if (!ownsNow && ownedBefore) {
       this.editor.cancelPaste();
       this.nudged = false;
       if (this.runningBeforeEdit !== null) this.togglePlay(this.runningBeforeEdit);
@@ -524,19 +549,35 @@ class App {
       this.dirty = true;
     }
 
+    // Leaving analysis closes its panel; the selection deliberately survives,
+    // so a region chosen in one mode is still chosen in another (MO-4).
+    if (before === 'analysis' && mode !== 'analysis') this.analysis.open(false);
+    this.dirty = true;
+
     this.#applyEditorToInputs();
     this.persistEditor();
+  }
+
+  /** E and A each toggle one mode against Simulate. */
+  toggleModeTo(target: 'edit' | 'analysis'): void {
+    this.setMode(this.editor.mode === target ? 'simulate' : target);
   }
 
   #applyEditorToInputs(): void {
     const { dom, editor } = this;
     const editing = editor.mode === 'edit';
+    const analysing = editor.mode === 'analysis';
 
     dom.modeToggle.setAttribute('aria-pressed', String(editing));
     dom.modeToggle.textContent = editing ? '✎ Editing' : '✎ Edit';
+    dom.analysisToggle.setAttribute('aria-pressed', String(analysing));
+    dom.analysisToggle.textContent = analysing ? '🔬 Analysing' : '🔬 Analyse';
     dom.toolbar.hidden = !editing;
+    dom.analysisToolbar.hidden = !analysing;
     dom.canvas.classList.toggle('editing', editing);
-    dom.canvas.classList.toggle('selecting', editing && editor.tool === 'select');
+    // In analysis mode the pointer always selects, so it always shows the
+    // selection cursor rather than a tool's.
+    dom.canvas.classList.toggle('selecting', analysing || (editing && editor.tool === 'select'));
 
     for (const button of dom.tools) {
       button.classList.toggle('active', button.dataset.tool === editor.tool);
@@ -701,16 +742,16 @@ class App {
 
       this.lastMouse = this.#local(e);
       this.pointerPixel = this.#pixelAt(e);
-      if (this.editor.mode === 'edit' && !this.nudged) this.hover = this.#pixelAt(e);
+      if (ownsPointer(this.editor.mode) && !this.nudged) this.hover = this.#pixelAt(e);
 
       if (this.editor.handlePointerDown(e, this.#actionPixel(e))) {
         this.dirty = true;
         this.#applyEditorToInputs();
         return;
       }
-      // In edit mode the editor owns both buttons, so nothing below can run and
-      // no click can drive or toggle a wire.
-      if (this.editor.mode === 'edit') return;
+      // In edit and analysis modes the editor owns both buttons, so nothing
+      // below can run and no click can drive or toggle a wire.
+      if (ownsPointer(this.editor.mode)) return;
 
       if (e.button === 1) {
         this.panning = true;
@@ -748,7 +789,7 @@ class App {
       this.lastMouse = now;
       this.pointerPixel = this.#pixelAt(e);
 
-      if (this.editor.mode === 'edit') {
+      if (ownsPointer(this.editor.mode)) {
         // Moving the real mouse takes the pointer back from the arrow keys.
         this.hover = this.#pixelAt(e);
         if (this.nudged) {
@@ -772,7 +813,7 @@ class App {
         if (this.pointers.size < 2) this.pinch = null;
         const tap = this.tapCandidate;
         // Touch never edits; in edit mode a tap must not poke a wire either.
-        if (tap && tap.moved < TAP_SLOP && this.editor.mode !== 'edit') {
+        if (tap && tap.moved < TAP_SLOP && !ownsPointer(this.editor.mode)) {
           this.#poke(this.viewport.toWorld(tap.x, tap.y), 'x');
         }
         if (this.pointers.size === 0) this.tapCandidate = null;
@@ -784,7 +825,7 @@ class App {
         this.#applyEditorToInputs();
         return;
       }
-      if (this.editor.mode === 'edit') return;
+      if (ownsPointer(this.editor.mode)) return;
 
       if (e.button === 1) this.panning = false;
       if (e.button === 0 && this.held) {
@@ -841,6 +882,18 @@ class App {
 
   #bindKeyboard(): void {
     window.addEventListener('keydown', (e) => {
+      const typing =
+        e.target instanceof HTMLElement &&
+        ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName);
+
+      // Backspace still means "go back" in some browsers — WebKit navigated to
+      // about:blank on it, losing the page and any unsaved work. In edit mode
+      // it maps to clearRegion and is suppressed as a side effect of being
+      // handled; analysis mode makes it inert, which let the default through.
+      // The app owns this key whenever the user is not typing, whether or not
+      // it currently does anything with it.
+      if (e.key === 'Backspace' && !typing) e.preventDefault();
+
       const action = resolveKey(
         {
           key: e.key,
@@ -964,7 +1017,7 @@ class App {
         this.toggleSettings();
         return false;
       case 'toggleMode':
-        this.setMode(this.editor.mode === 'edit' ? 'simulate' : 'edit');
+        this.toggleModeTo(action.target);
         return false;
       case 'analyse':
         this.analysis.open(true);
@@ -1027,15 +1080,18 @@ class App {
 
   #overlay(): Overlay {
     const editing = this.editor.mode === 'edit';
+    const owns = ownsPointer(this.editor.mode);
     const doc = this.doc;
     return {
       pending: doc ? doc.pendingEdits() : EMPTY_PIXELS,
+      // No preview in analysis mode: there is no tool whose effect to preview.
       preview: editing && this.hover ? this.editor.previewAt(this.hover) : EMPTY_PIXELS,
-      hover: editing ? this.hover : null,
+      hover: owns ? this.hover : null,
+      // The grid is a drawing aid, so it stays with drawing.
       showGrid: editing,
-      selection: editing ? this.editor.selection : null,
+      selection: owns ? this.editor.selection : null,
       floating: editing ? this.editor.floating : null,
-      cursor: editing && this.nudged ? this.hover : null,
+      cursor: owns && this.nudged ? this.hover : null,
     };
   }
 
@@ -1074,7 +1130,7 @@ class App {
       at !== null && at.x >= 0 && at.y >= 0 && at.x < circuit.width && at.y < circuit.height;
     dom.statCursor.textContent = inside ? `${at.x}, ${at.y}` : '—';
 
-    const rect = this.editor.mode === 'edit' ? this.editor.selection : null;
+    const rect = ownsPointer(this.editor.mode) ? this.editor.selection : null;
     dom.statSelectionField.hidden = rect === null;
     if (rect) {
       // Inclusive bounds: a 1x1 selection reads as a single pixel, not a range.
@@ -1144,7 +1200,7 @@ class App {
     const cursor = this.#statValue('cursor');
     if (cursor && cursor !== '—') pairs.push(['cursor', cursor]);
 
-    const rect = this.editor.mode === 'edit' ? this.editor.selection : null;
+    const rect = ownsPointer(this.editor.mode) ? this.editor.selection : null;
     if (rect) {
       pairs.push(['selection', this.#statValue('selection')]);
       pairs.push([

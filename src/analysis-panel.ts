@@ -45,10 +45,13 @@ export class AnalysisPanel {
     private readonly dom: Dom,
     private readonly host: PanelHost
   ) {
-    dom.analyse.addEventListener('click', () => {
+    // Analysis is reachable only from analysis mode now (FR-008); the button
+    // lives in that mode's own toolbar rather than the editing one.
+    dom.analysisRunToolbar.addEventListener('click', () => {
       this.open(true);
       void this.run();
     });
+    dom.analysisPanelToggle.addEventListener('click', () => this.open());
     dom.analysisClose.addEventListener('click', () => this.open(false));
     dom.analysisRun.addEventListener('click', () => void this.run());
     dom.analysisAbort.addEventListener('click', () => {
@@ -58,8 +61,9 @@ export class AnalysisPanel {
     dom.analysisExport.addEventListener('click', () => this.#exportNetlist());
     dom.analysisImport.addEventListener('click', () => void this.#importNetlist());
 
-    for (const button of [dom.analyse, dom.analysisRun, dom.analysisAbort, dom.analysisReplace,
-      dom.analysisExport, dom.analysisImport, dom.analysisClose]) {
+    for (const button of [dom.analysisRunToolbar, dom.analysisPanelToggle, dom.analysisRun,
+      dom.analysisAbort, dom.analysisReplace, dom.analysisExport, dom.analysisImport,
+      dom.analysisClose]) {
       // Enter and Space activate a focused <button>, which are exactly the keys
       // the editor needs. Same reason the toolbar does this.
       button.addEventListener('mousedown', (e) => e.preventDefault());
@@ -83,11 +87,12 @@ export class AnalysisPanel {
     this.dom.analysisStale.hidden = false;
   }
 
-  /** Called whenever the selection or document changes. */
+  /** Called whenever the selection, mode or document changes. */
   refreshAvailability(): void {
     const has = this.host.selection() !== null && this.host.doc() !== null;
-    this.dom.analyse.disabled = !has || this.#busy;
-    this.dom.analysisRun.disabled = !has || this.#busy;
+    const ready = has && !this.#busy;
+    this.dom.analysisRunToolbar.disabled = !ready;
+    this.dom.analysisRun.disabled = !ready;
   }
 
   // -------------------------------------------------------------------

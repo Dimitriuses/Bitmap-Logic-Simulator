@@ -42,10 +42,10 @@ user-visible half, so this is the only phase that both blocks everything and shi
 **⚠️ CRITICAL**: T004 and T005 must land together. A mode whose key table is not verified is a
 mode that silently edits.
 
-- [ ] T003 Extend `EditorMode` to `'simulate' | 'edit' | 'analysis'` in `src/editor.ts`, and extend `InputContext.mode` to match in `src/keymap.ts` (MO-1).
-- [ ] T004 Guard the editing actions in `src/keymap.ts`: `copy`, `cut`, `clearRegion`, `paste`, `commit` and `cancelPaste` resolve to `null` when `ctx.mode === 'analysis'` — a change to existing guards, several of which are currently unconditional (MO-3).
-- [ ] T005 Grow the exhaustive precedence table in `scripts/verify/keymap.mjs` to cover three modes, and assert that no editing action is reachable in analysis mode for any combination of floating/selection/key (MO-7, Scenario 1).
-- [ ] T006 Persist the third mode in `src/settings.ts` so the app reopens in the mode it was left in, and tolerate an unknown stored value by falling back to simulate.
+- [X] T003 Extend `EditorMode` to `'simulate' | 'edit' | 'analysis'` in `src/editor.ts`, and extend `InputContext.mode` to match in `src/keymap.ts` (MO-1).
+- [X] T004 Guard the editing actions in `src/keymap.ts`: `copy`, `cut`, `clearRegion`, `paste`, `commit` and `cancelPaste` resolve to `null` when `ctx.mode === 'analysis'` — a change to existing guards, several of which are currently unconditional (MO-3).
+- [X] T005 Grow the exhaustive precedence table in `scripts/verify/keymap.mjs` to cover three modes, and assert that no editing action is reachable in analysis mode for any combination of floating/selection/key (MO-7, Scenario 1).
+- [X] T006 Persist the third mode in `src/settings.ts` so the app reopens in the mode it was left in, and tolerate an unknown stored value by falling back to simulate.
 
 **Checkpoint**: the mode exists and provably cannot write.
 
@@ -58,16 +58,34 @@ mode that silently edits.
 **Independent Test**: enter analysis mode, attempt every editing gesture and shortcut; the
 unsaved-changes flag and undo depth never move.
 
-- [ ] T007 [US1] Route pointer events for analysis mode in `src/editor.ts`: selection drag only, no tool dispatch, no stroke begun on either button (MO-2).
-- [ ] T008 [US1] Block floating pastes in analysis mode in `src/editor.ts` and `src/clipboard.ts`: entering the mode with one pending requires it committed or cancelled first (MO-5, edge case).
-- [ ] T009 [P] [US1] Add the three-way mode control and an analysis toolbar to `index.html`, with handles in `src/dom.ts` — analysis tools only, no drawing tool, colour, bus width or rotation control (MO-8).
-- [ ] T010 [P] [US1] Style the mode control and analysis toolbar in `css/style.css`.
-- [ ] T011 [US1] Wire mode switching in `src/ui.ts`: pause on entry, restore the previous run state on exit, preserve the selection across every transition (MO-4, MO-6; depends on T003, T009).
-- [ ] T012 [US1] Apply the no-focus rule to every analysis-mode control in `src/ui.ts` — `preventDefault` on `mousedown`, as the editor toolbar and status bar already do (MO-9).
-- [ ] T013 [US1] Move the analysis entry point out of edit mode: remove the Edit-mode button from `index.html` and retarget the `A` key and panel opening to analysis mode in `src/ui.ts` and `src/analysis-panel.ts` (FR-008).
-- [ ] T014 [US1] Verify Scenario 1 of [quickstart.md](./quickstart.md) in the browser: exercise every key in the key table and every pointer gesture in analysis mode, asserting `canUndo`, `canRedo` and the dirty flag are unchanged throughout (SC-001, SC-010).
+- [X] T007 [US1] Route pointer events for analysis mode in `src/editor.ts`: selection drag only, no tool dispatch, no stroke begun on either button (MO-2).
+- [X] T008 [US1] Block floating pastes in analysis mode in `src/editor.ts` and `src/clipboard.ts`: entering the mode with one pending requires it committed or cancelled first (MO-5, edge case).
+- [X] T009 [P] [US1] Add the three-way mode control and an analysis toolbar to `index.html`, with handles in `src/dom.ts` — analysis tools only, no drawing tool, colour, bus width or rotation control (MO-8).
+- [X] T010 [P] [US1] Style the mode control and analysis toolbar in `css/style.css`.
+- [X] T011 [US1] Wire mode switching in `src/ui.ts`: pause on entry, restore the previous run state on exit, preserve the selection across every transition (MO-4, MO-6; depends on T003, T009).
+- [X] T012 [US1] Apply the no-focus rule to every analysis-mode control in `src/ui.ts` — `preventDefault` on `mousedown`, as the editor toolbar and status bar already do (MO-9).
+- [X] T013 [US1] Move the analysis entry point out of edit mode: remove the Edit-mode button from `index.html` and retarget the `A` key and panel opening to analysis mode in `src/ui.ts` and `src/analysis-panel.ts` (FR-008).
+- [X] T014 [US1] Verify Scenario 1 of [quickstart.md](./quickstart.md) in the browser: exercise every key in the key table and every pointer gesture in analysis mode, asserting `canUndo`, `canRedo` and the dirty flag are unchanged throughout (SC-001, SC-010).
 
-**Checkpoint**: US1 is complete and demonstrable on its own.
+**Checkpoint**: US1 is complete and demonstrable on its own. 16/16 browser checks on Chromium,
+Edge, Firefox and WebKit; `npm run verify` green with the key table at 29 checks.
+
+**Two things found while building this phase, recorded rather than smoothed over:**
+
+1. **`ui.ts` conflated "is editing" with "owns the pointer".** `handlePointerMove` was gated on
+   `mode === 'edit'`, so in analysis mode a drag never updated and a selection never grew past
+   its first pixel. Seven call sites had the same conflation, including the overlay, which would
+   not have drawn the selection either. Fixed by introducing `ownsPointer(mode)` in
+   `src/editor.ts` and using it wherever the question is about the pointer rather than about
+   editing. The read-only assertions passed throughout — it was the mode's *useful* half that
+   was broken, not its safe half.
+
+2. **Backspace navigated back in WebKit**, to `about:blank`, losing the page and any unsaved
+   work. Edit mode maps Backspace to `clearRegion` and suppresses the default as a side effect
+   of handling it; making the key inert in analysis mode let the browser's legacy behaviour
+   through. `src/ui.ts` now calls `preventDefault` for Backspace whenever the user is not
+   typing, whether or not the app does anything with it — the app owns that key in every mode.
+   Found only because the exhaustive gesture sweep ran on all four browsers.
 
 ---
 

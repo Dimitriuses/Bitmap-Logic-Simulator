@@ -28,7 +28,7 @@ export interface KeyEventLike {
 }
 
 export interface InputContext {
-  readonly mode: 'simulate' | 'edit';
+  readonly mode: 'simulate' | 'edit' | 'analysis';
   readonly hasFloating: boolean;
   readonly hasSelection: boolean;
 }
@@ -41,7 +41,7 @@ export type InputAction =
   | { kind: 'clearRegion' }
   | { kind: 'togglePause' }
   | { kind: 'toggleSettings' }
-  | { kind: 'toggleMode' }
+  | { kind: 'toggleMode'; target: 'edit' | 'analysis' }
   | { kind: 'analyse' }
   | { kind: 'undo' }
   | { kind: 'redo' }
@@ -76,21 +76,29 @@ function isTyping(tag: string | undefined): boolean {
 export function resolveKey(e: KeyEventLike, ctx: InputContext): InputAction {
   const typing = isTyping(e.targetTag);
 
+  // Analysis mode is read-only, and that is enforced here rather than in each
+  // handler. Every action below that could change the document is gated on
+  // this one predicate, so there is one place to check and one place to break.
+  const canEdit = ctx.mode !== 'analysis';
+
   // --- Ctrl/Cmd combinations resolve before everything else (KM-5).
   if (e.ctrlKey || e.metaKey) {
     switch (e.key.toLowerCase()) {
       case 'z':
+        if (!canEdit) return null;
         return e.shiftKey ? { kind: 'redo' } : { kind: 'undo' };
       case 'y':
-        return { kind: 'redo' };
+        return canEdit ? { kind: 'redo' } : null;
       case 's':
+        // Saving is not editing: it writes the file, not the document, and a
+        // read-only mode has no reason to forbid keeping your work.
         return { kind: 'save' };
       case 'c':
-        return ctx.hasSelection ? { kind: 'copy' } : null;
+        return canEdit && ctx.hasSelection ? { kind: 'copy' } : null;
       case 'x':
-        return ctx.hasSelection ? { kind: 'cut' } : null;
+        return canEdit && ctx.hasSelection ? { kind: 'cut' } : null;
       case 'v':
-        return { kind: 'paste' };
+        return canEdit ? { kind: 'paste' } : null;
       default:
         return null;
     }
@@ -99,15 +107,27 @@ export function resolveKey(e: KeyEventLike, ctx: InputContext): InputAction {
   const arrow = ARROWS[e.key];
 
   // --- 1. A floating paste is the innermost thing open.
-  if (ctx.hasFloating) {
+  //
+  // MO-5 says a paste cannot exist in analysis mode, but resolveKey is total
+  // over every context it is handed, not only the reachable ones — so the
+  // guard is here too rather than relying on a caller's discipline.
+  if (ctx.hasFloating && canEdit) {
     if (arrow) return { kind: 'move', target: 'paste', dx: arrow.dx, dy: arrow.dy };
     if (e.key === 'Enter') return { kind: 'commit' };
     if (e.key === 'Escape') return { kind: 'cancelPaste' };
   }
 
+  // Enter runs the analysis. It is free to mean this only because a floating
+  // paste — the other claimant on Enter — cannot exist in analysis mode.
+  if (ctx.mode === 'analysis' && e.key === 'Enter' && !typing) {
+    return ctx.hasSelection ? { kind: 'analyse' } : null;
+  }
+
   // --- 2. A selection exists.
   if (!ctx.hasFloating && ctx.hasSelection) {
-    if (e.key === 'Delete' || e.key === 'Backspace') return { kind: 'clearRegion' };
+    // Delete clears pixels, so it is an edit. Escape only drops the selection,
+    // which changes nothing in the document and stays available.
+    if (canEdit && (e.key === 'Delete' || e.key === 'Backspace')) return { kind: 'clearRegion' };
     if (e.key === 'Escape') return { kind: 'clearSelection' };
   }
 
@@ -116,7 +136,9 @@ export function resolveKey(e: KeyEventLike, ctx: InputContext): InputAction {
   // so holding the pencil and tapping an arrow draws one pixel. Edit mode only:
   // in simulate mode the arrows do nothing at all.
   if (arrow && !ctx.hasFloating) {
-    if (ctx.mode === 'edit' && !typing) {
+    // Both editing and analysis own the pointer, and both want precise
+    // positioning — one to place a pixel, the other to place a selection edge.
+    if ((ctx.mode === 'edit' || ctx.mode === 'analysis') && !typing) {
       return { kind: 'move', target: 'pointer', dx: arrow.dx, dy: arrow.dy };
     }
     return null;
@@ -128,14 +150,16 @@ export function resolveKey(e: KeyEventLike, ctx: InputContext): InputAction {
       return { kind: 'toggleSettings' };
     case ' ':
       return typing ? null : { kind: 'togglePause' };
+    // E and A each toggle one mode against Simulate. With three modes a single
+    // "next mode" key would make Simulate unreachable without cycling through
+    // the other one, and would make what a key does depend on where you already
+    // are — which is the thing this table exists to prevent.
     case 'e':
     case 'E':
-      return typing ? null : { kind: 'toggleMode' };
-    // Only with a selection: analysis is defined relative to one, and a key
-    // that silently does nothing is worse than a key that is not bound.
+      return typing ? null : { kind: 'toggleMode', target: 'edit' };
     case 'a':
     case 'A':
-      return typing || !ctx.hasSelection ? null : { kind: 'analyse' };
+      return typing ? null : { kind: 'toggleMode', target: 'analysis' };
     case 'r':
     case 'R':
       return typing ? null : { kind: 'reset' };

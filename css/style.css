@@ -330,6 +330,59 @@ kbd {
   min-width: 108px;
 }
 
+/* ---------------------------------------------------------------- *
+ * Analysis mode                                                     *
+ * ---------------------------------------------------------------- */
+
+/* Shares the editing toolbar's box so the stage does not shift when the mode
+   changes. Note it is a SIBLING of #toolbar, not a child: #toolbar scrolls
+   horizontally, which forces overflow-y and would clip anything inside it. */
+#analysis-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-edge);
+  flex: 0 0 auto;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+#analysis-toolbar[hidden] {
+  display: none;
+}
+
+/* The mode's promise, stated where the tools would be. */
+.mode-note {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  white-space: nowrap;
+}
+
+/* The select tool is shown as permanently active because it is the only tool
+   this mode has — it is an indicator, not a choice. */
+#analysis-select {
+  opacity: 1;
+}
+
+#analysis-select:disabled {
+  cursor: default;
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+#analysis-toggle[aria-pressed='true'],
+#mode-toggle[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 #stat-selection-field {
   color: var(--accent);
 }

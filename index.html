@@ -28,6 +28,9 @@
         <button id="mode-toggle" type="button" aria-pressed="false" title="Toggle edit mode (E)">
           ✎ Edit
         </button>
+        <button id="analysis-toggle" type="button" aria-pressed="false" title="Toggle analysis mode (A) — read-only">
+          🔬 Analyse
+        </button>
         <button id="play" class="primary" type="button">⏸ Pause</button>
         <button id="settings-toggle" type="button" aria-expanded="false" aria-controls="settings">
           Settings
@@ -76,11 +79,22 @@
           </div>
 
           <div class="tool-group">
-            <button id="analyse" type="button" title="Analyse the selection (A)" disabled>🔬 Analyse</button>
-          </div>
-
-          <div class="tool-group">
             <button id="save" class="primary" type="button" title="Save (Ctrl+S)">Save</button>
+          </div>
+        </div>
+
+        <div id="analysis-toolbar" hidden aria-label="Analysis tools">
+          <div class="tool-group">
+            <span class="mode-note" title="Analysis mode cannot change the circuit">read-only</span>
+          </div>
+          <div class="tool-group">
+            <button id="analysis-select" class="tool active" type="button" disabled title="Select a region to analyse — the only tool this mode has">⬚</button>
+          </div>
+          <div class="tool-group">
+            <button id="analysis-run-toolbar" class="primary" type="button" disabled title="Analyse the selection (Enter)">Analyse selection</button>
+          </div>
+          <div class="tool-group">
+            <button id="analysis-panel-toggle" type="button" title="Show or hide the analysis panel">Panel</button>
           </div>
         </div>
 

@@ -85,7 +85,7 @@ export interface EditorPrefs {
 
 const EDITOR_KEY = 'bmplogicsim.editor';
 
-const MODES: readonly EditorMode[] = ['simulate', 'edit'];
+const MODES: readonly EditorMode[] = ['simulate', 'edit', 'analysis'];
 const TOOLS: readonly ToolId[] = [
   'pencil',
   'line',
